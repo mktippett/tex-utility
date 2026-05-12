@@ -1,54 +1,87 @@
 # tex-utility
 
-Tools for converting Beamer slide decks to journal manuscript drafts.
+Tools for converting Beamer slide decks to journal manuscript drafts,
+and for splitting compiled PDFs into main text and SI files.
 
 ---
 
-## Converters
+## Scripts
 
-| Script | Target format | Output stem |
-|--------|--------------|-------------|
-| `beamer_to_manuscript.py` | AMS (`ametsocV6.1`) | `<input>_manuscript.tex` |
-| `beamer_to_agu.py` | AGU (`agujournal2019`) | `<input>_agu.tex` |
-
-Both share generic Beamer parsing from `beamer_common.py`. Format-specific
-logic (preamble, author markup, bibliography style, figure conventions) lives
-in each script.
+| Script | Purpose |
+|--------|---------|
+| `scripts/convert.py` | Unified CLI — converts Beamer to AMS or AGU manuscript |
+| `scripts/beamer_to_ams.py` | AMS converter (can also be run directly) |
+| `scripts/beamer_to_agu.py` | AGU converter (can also be run directly) |
+| `scripts/beamer_common.py` | Shared Beamer parsing (imported by both converters) |
+| `scripts/split_pdf.py` | Split a compiled PDF into main text and SI at a given page |
 
 ### Class files
 
 | Journal | Class | Location |
 |---------|-------|----------|
 | AMS | `ametsocV6.1.cls`, `ametsocV6.bst` | `ams/` |
-| AGU | `agujournal2019.cls` | `agu/` |
+| AGU | `agujournal2019.cls`, `agutexSI2019.cls` | `agu/` |
 
 ---
 
 ## Usage
 
+### Beamer → manuscript
+
 ```bash
-# AMS manuscript
-micromamba run -n pangeo-2025 python beamer_to_manuscript.py slides.tex
-# → slides_manuscript.tex  (compile from project root; ametsocV6.1.cls must be on TEXINPUTS)
+# Unified CLI (recommended)
+python scripts/convert.py --format ams slides.tex
+# → slides_manuscript.tex
+
+python scripts/convert.py --format agu slides.tex
+# → slides_agu.tex
+
+python scripts/convert.py --format agu slides.tex --journal "Geophysical Research Letters"
+
+# Explicit output path
+python scripts/convert.py --format ams slides.tex draft_v1.tex
+```
+
+The individual converter scripts can also be run directly and behave identically:
+
+```bash
+python scripts/beamer_to_ams.py slides.tex
+python scripts/beamer_to_agu.py slides.tex
+```
+
+### Compiling the output
+
+```bash
+# AMS
 TEXINPUTS=./ams/: pdflatex slides_manuscript.tex
 bibtex slides_manuscript
 TEXINPUTS=./ams/: pdflatex slides_manuscript.tex
 TEXINPUTS=./ams/: pdflatex slides_manuscript.tex
 
-# AGU manuscript
-micromamba run -n pangeo-2025 python beamer_to_agu.py slides.tex
-# → slides_agu.tex
+# AGU
 TEXINPUTS=./agu/: pdflatex slides_agu.tex
 bibtex slides_agu
 TEXINPUTS=./agu/: pdflatex slides_agu.tex
 TEXINPUTS=./agu/: pdflatex slides_agu.tex
 ```
 
-You can also specify an explicit output path:
+### Splitting a PDF
 
 ```bash
-micromamba run -n pangeo-2025 python beamer_to_manuscript.py slides.tex draft_v1.tex
+python scripts/split_pdf.py paper.pdf SPLIT_PAGE
 ```
+
+`SPLIT_PAGE` is 1-based and is the **first page of the second output file**.
+
+```bash
+# Split paper.pdf: pages 1–17 → paper-main.pdf, pages 18–end → paper-SI.pdf
+python scripts/split_pdf.py paper.pdf 18
+
+# Custom output names
+python scripts/split_pdf.py paper.pdf 18 main.pdf si.pdf
+```
+
+Requires `pypdf` (`pip install pypdf`).
 
 ---
 
@@ -74,7 +107,8 @@ micromamba run -n pangeo-2025 python beamer_to_manuscript.py slides.tex draft_v1
 - Author affiliations use `\aff{a}`, `\aff{b}`, … (letter-based)
 - `\abstract{...}` command form
 - `natbib` / `\citep` / `\citet` — kept as-is
-- `\bibliographystyle{ametsocV6}` is passed through from the source
+- `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and
+  injected into the postamble (works regardless of whether they appear inside or outside a frame)
 
 **AGU-specific:**
 - Author affiliations use `\affil{1}`, `\affil{2}`, … (number-based)
@@ -237,10 +271,9 @@ The AMS converter leaves these unchanged. The AGU converter remaps them:
 
 ### Bibliography
 
-Place `\bibliographystyle{...}` and `\bibliography{...}` outside any
-frame (e.g., in a "References" frame that contains only these two commands).
-The converter passes them through as-is for AMS; for AGU it drops
-`\bibliographystyle` (handled by the class) and keeps `\bibliography`.
+Place `\bibliographystyle{...}` and `\bibliography{...}` anywhere in the
+source — inside or outside a frame. Both converters extract these from the
+raw source text, so their location doesn't matter.
 
 ```latex
 \begin{frame}[allowframebreaks]{References}
@@ -299,7 +332,8 @@ The following are removed silently — no action needed in the source:
 - Font size commands: `\tiny`, `\scriptsize`, `\footnotesize`, `\small`, `\large`, etc.
 - `\centering`, `\vspace{...}`, `\hspace{...}`, `\medskip`, `\vfill`, etc.
 - `\setlength`, `\addtolength`, `\renewcommand` (except `\thefigure` and `\thetable`)
-- `\bibliographystyle{...}` and `\bibliography{...}` when inside a frame
+- `\bibliographystyle{...}` and `\bibliography{...}` when inside a frame body
+  (the values are extracted separately and injected into the postamble)
 - Comment lines (`% ...`); `\%` is preserved
 
 ---
@@ -308,14 +342,25 @@ The following are removed silently — no action needed in the source:
 
 ```
 tex-utility/
-  beamer_common.py              Shared Beamer parsing (both converters import this)
-  beamer_to_manuscript.py       AMS converter
-  beamer_to_manuscript_spec.md  AMS converter behavioral spec
-  beamer_to_agu.py              AGU converter
-  beamer_to_agu_spec.md         AGU converter behavioral spec
+  scripts/
+    convert.py              Unified CLI (--format ams|agu)
+    beamer_to_ams.py        AMS converter
+    beamer_to_agu.py        AGU converter
+    beamer_common.py        Shared Beamer parsing
+    split_pdf.py            PDF splitter (main text / SI)
+  specs/
+    beamer_to_ams_spec.md   AMS converter behavioral spec
+    beamer_to_agu_spec.md   AGU converter behavioral spec
+  tests/
+    run_tests.py            Regression test suite
+    test_input.tex          Test Beamer source
+  examples/                 Example Beamer sources and converted outputs
   ams/
     ametsocV6.1.cls
     ametsocV6.bst
   agu/
     agujournal2019.cls
+    agutexSI2019.cls
+    agujournaltemplate.tex
+    si_template_2019.tex
 ```

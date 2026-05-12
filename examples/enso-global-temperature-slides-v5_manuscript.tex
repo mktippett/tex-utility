@@ -1,0 +1,601 @@
+\documentclass{ametsocV6.1}
+
+%% AMS packages (ametsoc.sty is already loaded by the class)
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{natbib}
+\usepackage{caption}
+
+% \journal{jcli}  % uncomment if using full ametsoc submission package
+
+\begin{document}
+
+\title{The relation of ENSO with global mean temperature}
+
+\authors{Michael K. Tippett\aff{a}\correspondingauthor{M. K. Tippett,
+    email@institution.edu} and Emily J. Becker\aff{b}}
+
+\affiliation{
+  \aff{a}{Department of Applied Physics and Applied
+  Mathematics, Columbia University, New York, New York}\\
+  \aff{b}{University of Miami Rosenstiel School for Marine, Earth,
+  and Atmospheric Science, Miami, Florida}
+}
+
+\abstract{
+  ENSO is a predictable contribution to global temperature. Previous studies found that the lag correlation between ENSO and
+    global mean temperature peaks at 3--4 months with ENSO leading. Here we examined this relation with updated data and attention
+    to seasonality. We found weaker relations than previously reported and that
+    accounting for seasonality limits the peak correlations between
+    ENSO and global mean temperature to January and February. The seasonality of the relation between ENSO and global mean
+    temperature is explained by the seasonality of ENSO itself and by
+    the seasonality of the atmospheric bridge mechanisms through which
+    ENSO-related circulation drives remote SST changes.
+}
+
+\maketitle
+
+\section{Introduction}
+
+People like to talk about global mean temperature will do in
+    the future. \citet{Tippett2024trends} found that the skill of initialized
+    seasonal climate forecasts in predicting global mean temperature
+    was primarily attributable to ENSO. When ENSO was regressed out
+    the forecasts, the remaining skill was little more than that of a
+    linear trend, which suggests that ENSO is the primary source of
+    global mean temperature predictability in current seasonal
+    forecast systems. Since ENSO can be skillfully predicted a few seasons ahead,
+    better understanding of the influence of ENSO on global mean
+    temperature may improve our ability to anticipate short-term
+    variations in global mean temperature beyond the upward trend due
+    to anthropogenic forcing.
+
+A notable feature of the ENSO–global-temperature relationship
+    is the delayed response of global temperature response to ENSO. In an early study, \citet{Angell1981comparison} compared
+    variations of an equatorial eastern Pacific SST index
+    (0--10\textdegree S, 180\textdegree--90\textdegree W) with
+    variations in atmospheric temperature from a 63-station global
+    radiosonde network. They found that tropical tropospheric
+    temperature (0--16km average) as well as surface temperature was
+    maximally correlated with the equatorial Pacific SST index at
+    about a two-season lag.  Relations with atmospheric temperature in
+    temperate latitudes were weaker.
+
+  
+
+\citet{Angell2000tropospheric} used this lagged relationship
+    to account for variability in global temperatures due to ENSO and
+    thus improve estimates of temperature trends. \citet{Lean2008natural} took a similar approach to separating
+    forced and natural variability in surface temperature. They
+    included an ENSO index, lagged by four months, in a multiple linear
+    regression fit to global mean temperature that also included
+    volcanic aerosols, solar irradiance, and anthropogenic
+    forcing. This framework allowed them to attribute about
+    0.23\textdegree C of global mean temperature warming to the 1997
+    ``super'' El Ni\~no, approximately 0.096\textdegree C of global
+    mean temperature for each degree change in Nino-3.4. Similarly, \citet{Foster2011global} fit global mean
+    temperature by a multiple linear regression that included a
+    standardized ENSO index, aerosol optical depth, total solar
+    irradiance, and a linear time trend over the period
+    1979--2010. Depending on temperature dataset, global mean
+    temperature lagged their ENSO index by 2--5 months, and global
+    mean temperature changed approximately 0.075 \textdegree C per
+    standardized ENSO index unit.
+
+  
+  
+
+\citet{Trenberth2002evolution} examined spatially-resolved
+    diabatic processes in the relationship between ENSO and global
+    temperature. They concluded that delayed surface warming outside of the
+    tropical Pacific was due to persistent atmospheric circulation
+    changes forced from the tropical Pacific. They found that the lag correlation between Nino-3.4 and
+    global mean surface temperature peaked at three to four months,
+    depending on period. They speculated that differing ENSO indices
+    might be a reason for the longer two season lag priviously found
+    by \citet{Angell1981comparison}. They computed a three-month lagged regression coefficient of
+    0.094\textdegree C per unit of standardized Nino-3.4 for the
+    period 1950--1998. \citet{Kumar2003nature} focused on the delayed
+    \textit{atmospheric} response to El Ni\~no and explained the delay
+    as being due to a delayed tropical rainfall response to ENSO which
+    in turn was attributed to the seasonality of SST variability in the
+    tropical eastern Pacific. \citet{Su2005mechanisms} questioned this explanation and found
+    that the lagged response of tropospheric temperature in models to
+    ENSO forcing depended on mixed layer depth and showed little lag
+    sensitivity to the seasonal cycle of SST.
+
+  
+ 
+  
+
+The ``atmospheric bridge'' perspective introduced in the 1990s
+    provides a physical explanation for the delayed remote response to
+    ENSO \citep[see][ for a review]{Alexander2002atmospheric}. The atmospheric bridge refers to the set of teleconnections
+    and mechanisms through which ENSO-related SST anomalies in the
+    tropical Pacific force SST anomalies in remote ocean basins via
+    changes in radiative and heat fluxes. The atmospheric bridge responses in the tropics (Indian Ocean,
+    South China Sea, Atlantic) have the same sign as the tropical
+    Pacific ENSO signal and thus contribute constructively to global
+    mean temperature anomalies. In the atmospheric bridge, the delayed remote response is due
+    to the rapid (on the order of two weeks) atmospheric adjustment to
+    tropical Pacific SST anomalies being followed by the slower
+    integration of the resulting flux anomalies by the ocean mixed
+    layer \citep{Klein1999remote}. Seasonality of ENSO and its
+    teleconnections create seasonality in the remote responses.
+
+There is an inconsistency between studies which pooled all
+    months together to examine the lagged relationship of ENSO and
+    global temperature \citep[e.g.,][]{Trenberth2002evolution,
+      Lean2008natural, Foster2011global}, thus ignoring seasonality,
+    and atmospheric bridge studies which highlight seasonality by
+    focusing on the ENSO peak and the delayed remote response. In addition, the most recent spatially resolved analysis of the
+    relationship between ENSO and global temperature used data ending
+    in 1998 or so. Time for an update!
+
+\section{Data and methods}
+
+Our analysis used monthly data over the period 1979--2025. The Ni\~no-3.4 index is the average of sea surface temperature
+    (SST) in the tropical Pacific box  170\textdegree W--120\textdegree W,
+    5\textdegree S--5\textdegree N \citep{Barnston1997} and was
+    computed from ERSSTv5 \citep{Huang:ERSST5}. Warm and cool ENSO years were identified from the NOAA Oceanic
+    Nino Index (ONI, version 5) based on December--February Nino-3.4
+    conditions. For each event, composites were formed using a
+    16-month window beginning in June (year 0) before the boreal
+    winter peak and extending through September of the following year
+    (year +1). Thus, for example, the 1997/98 El Ni\~no corresponds to
+    the period June 1997 through September 1998. Warm ENSO years were
+    1979, 1982, 1986, 1987, 1991, 1994, 1997, 2002, 2004, 2006, 2009,
+    2014, 2015, 2018, 2019, and 2023. Cool ENSO years were 1983, 1984,
+    1988, 1995, 1998, 1999, 2000, 2005, 2007, 2008, 2010, 2011, 2017,
+    2020, 2021, and 2022.
+
+  
+
+Averages of near-surface temperature were computed from the
+    NOAA global surface temperature version 6.1
+    \citep[NOAAGlobalTemp;][]{Huang2022improvements}. 5$\times$5
+    resolution which means the tropics are $\pm 22.5$.
+
+  
+
+Box definitions. Boxes on map are in Fig.\ \ref{fig:map-box}.
+
+  
+
+Fluxes etc.\ are taken from the fifth generation ECMWF
+    atmospheric reanalysis of the global climate
+    \citep[ERA5;][]{Hersbach2020era5}.
+
+Anomalies and detrending details. Tendencies were computed by first differencing in time. Each
+    tendency was labeled by the later of the two months used in the
+    difference, so that the tendency value at month $t$ represents the
+    change from month $t-1$ to month $t$. Accordingly, the first month
+    has no defined tendency value.
+
+  
+
+Lag correlations $C(L)$ were computed as the correlation
+    between $Y_{t+L}$ and $X_t$, where $L$ denotes lag in
+    months. Here, $X_t$ and $Y_t$ represent, for example, the Niño-3.4
+    index and global mean temperature at month $t$. Lags from $0$ to
+    $18$ months were considered, and all calendar months were included
+    in the calculation. Month-dependent lag correlations $C(M,L)$ were computed
+    separately for each calendar month $M$ ($M=1,2,\ldots,12$) as the
+    correlation between $Y_{t+L}$ and $X_t$ for times $t$ in calendar
+    month $M$. These month-dependent lag correlations were plotted as
+    a function of the target calendar month $M+L$. Lag regression coefficients were computed in the same way,
+    replacing correlation by regression.
+
+  
+
+The statistical significance of correlations, and equivalently
+    of regression coefficients, was assessed using a block bootstrap
+    with 12-month resampling segments (1000 samples with replacement)
+    to account for serial correlation. For tendencies, standard
+    bootstrap resampling was used because serial correlation was not
+    evident. We used applied a permutation test to assess the statistical
+    significance of ENSO composites.
+
+\section{Results}
+
+\textbf{Overview}
+  
+
+Lag correlations of Nino-3.4 with global mean temperature peak
+    at three months and are weaker than previously reported. Removing
+    trends increases the strength of correlations. Nino-3.4 is
+    significantly related with global mean temperature tendencies only
+    at zero lag, consistent with the atmospheric bridge mechanism.
+    (Fig.\ \ref{fig:no-seasonality}). Month-dependent lag correlations of Nino-3.4 with global mean
+    temperature peak in January and are statistically insignificant in
+    most other months.  Month-dependent lag correlations of Nino-3.4
+    with tropical mean temperature peak in February and are
+    statistically significant across the ENSO cycle.
+    (Fig. \ref{fig:with-seasonality}). ENSO composites show that in the zonal mean temperature
+    anomalies are mostly confined to the tropics. Within the tropics,
+    ENSO-related temperature anomalies outside the tropical Pacific
+    emerge at different times in the ENSO cycle, consistent with
+    atmospheric bridge mechanisms. (Fig. \ref{fig:composite}). Area-weighted composites of tropical basin averages explain
+    the peak timings. (Figs.\ \ref{fig:basin-composite} and
+    \ref{fig:basin-corr}). Radiative and heat flux composites (primarily solar and
+    latent) do their thing. (Fig.\
+    \ref{fig:flux_composites_solar_latent}).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-reg-without-seasonality-mini.pdf}
+  \caption{Lag (a) correlation and (b)
+      regression coefficients of Nino-3.4 with global and tropical
+      mean temperature.  Lag (c) correlation and (d) regression
+      coefficients of Nino-3.4 with global and tropical mean
+      temperature tendencies.  Filled circles indicate statistical
+      significance at the 5\% level.  Results for detrended time
+      series are shown in dark colors.}
+  \label{fig:no-seasonality}
+\end{figure}
+
+  
+   
+    
+
+Computed over all months, Nino-3.4 lag correlation and regression
+      coefficients peak at a lag of three months for global mean
+      temperature and at a lag of two months for tropical mean
+      temperature (Figs.\ \ref{fig:no-seasonality}a, b). Correlations of Nino-3.4 with global mean temperature are
+      substantially lower than those in \citet[][; their Fig.\
+      2]{Trenberth2002evolution} and are statistically significant
+      only at a lag of three months (5\% level). Statistically significant lag correlations of Nino-3.4 with
+      tropical mean temperature extend to 10 months. Detrending the data increases the strength of the
+      correlations substantially. The global mean temperature
+      correlation with Nino-3.4 at lag three increases from 0.21 to
+      0.48 after detrending. The regression coefficients change little
+      with detrending because the long-term Ni\~no-3.4 trend is small. On average, a one degree increase in Nino-3.4 is associated
+      with increases of 0.07\textdegree C and 0.16\textdegree C at
+      lags of two to four months in detrended global and tropical mean
+      temperatures, respectively. Nino-3.4 is significantly related only at zero lag with
+      global mean temperature tendencies and only at lags zero and one
+      with tropical mean temperature tendencies (Figs.\
+      \ref{fig:no-seasonality}c, d). This behavior is consistent with the atmospheric bridge
+      mechanism \citep{Klein1999remote} whereby ENSO-forced
+      circulation anomalies drive changes in SST with little delay. Detrending the data does not visibly change tendency
+      correlation and regression coefficients because differencing the
+      data effectively detrends it (Figs.\ \ref{fig:no-seasonality}c,
+      d). See Figs.\ \ref{fig:no-seasonality-cor-map} and
+      \ref{fig:no-seasonality-cor-map-diff} for lag correlation maps.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-reg-with-seasonality-2-lines.pdf}
+  \caption{Month-dependent lag
+      correlations and regression coefficients of Nino-3.4 with (a, b)
+      tropical mean temperature and (c, d) global mean
+      temperature. The x-axis shows the target month (start month +
+      lag), and each line corresponds to a different start month
+      May--April extending 18 months. Gray (black) dots indicate
+      statistical significance at the 5\% (1\%)
+      level.}
+  \label{fig:with-seasonality}
+\end{figure}
+
+  
+   
+    
+
+Month-dependent lag correlation and regression coefficients
+      of Nino-3.4 with tropical and global mean temperature are phase
+      locked to the annual cycle (Fig.\ \ref{fig:with-seasonality}). They depend on target month primarily rather than lag. For start months after May, tropical mean temperature
+      correlation and regression coefficients peak in February, and
+      those for global mean temperature peak in January. Peak regression coefficient values exceed the all-months
+      ones in Fig.\ \ref{fig:no-seasonality} by roughly a factor of
+      two. Statistically significant lag correlations between Nino-3.4
+      and global mean temperature are mostly limited to the target months
+      of January and February. Statistically significant lag correlations between Nino-3.4
+      and tropical mean extend to the end of the ENSO cycle in
+      May/June. For a given target month, the lag regression coefficient
+      varies more with start month than the lag correlation
+      coefficients do because the lag regression coefficients depend
+      inversely on the Nino-3.4 start month variance, which has a
+      strong seasonal cycle. Detrending increases correlation and statistical
+      significance (Fig.\ \ref{fig:corr-with-seasonality-chiclet}). The average of the month-dependent lag correlations over
+      start month approximately recovers the the all-months lag
+      correlations (Fig.\ \ref{fig:pooled-vs-ave}).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/zonal-mean-composite-window.pdf}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window.pdf}
+  \caption{Composites of (a, c) zonal and (b, d) tropical mean temperature
+      anomaly from June (year 0) through September (year +1) during
+      warm and (b) cool ENSO years. White (black) dots indicate
+      statistical significance at the 5\% (1\%) level. Dashed lines in
+      panels b and d show Indian (green), South China Sea (purple),
+      tropical Pacific (red), South America (orange), tropical
+      Atlantic (blue), and Africa (olive)
+      sectors.}
+  \label{fig:composite}
+\end{figure}
+
+To understand the spatially-resolved sources of seasonality in
+    the month-dependent relations, we computed warm and cool ENSO
+    composites of zonal mean (Figs.\ \ref{fig:composite}a, c) and
+    tropical mean (Fig.\ \ref{fig:composite}b, c) temperature
+    anomalies over a 16-month window spanning the ENSO development and
+    decay life cycle (June year 0 preceding the boreal winter peak
+    through September of the following year +1). Statistically significant zonal mean anomalies are mostly
+    confined to the tropics. Initially in the ENSO cycle, zonal mean anomalies are confined
+    to the equation. They extend northward briefly in October and then
+    again in February. Temperature anomalies extend southward from the
+    equator in November where they persist into the following boreal
+    summer. Equatorial anomalies weaken and fade by May/June following the
+    boreal winter peak as the ENSO cycle ends. Off-equatorial tropical
+    anomalies persist longer, especially in the warm ENSO composites.
+
+  
+
+The tropical mean composites decompose the zonal mean signals
+    by longitude. The dominant ENSO signal in terms of duration and
+    spatial extent is the direct one in the central-eastern tropical
+    Pacific where it persists for the full ENSO cycle. Significant anomalies in the Indian sector appear in late
+    boreal fall (October/November) and persist for nearly a year. South China Sea sector anomalies show warm ENSO composite
+    phase signals lasting from December to September. South American sector composite anomalies are widespread by
+    November and last until the following June, with warm phase
+    anomalies lasting longer. Temperature anomalies in Atlantic sectors also show
+    substantial differences between warm and cool phases, with the
+    warm-phase signal having broad longitudinal extent in February
+    that persists several months while the cool-phase signal mostly
+    statistically insignificant. Warm-ENSO anomalies in in the tropical Atlantic expand
+    eastward into Africa in February, together with anomalies in the
+    Indian and South China Sea sectors that have their maximum
+    longitudinal extent in February. The generally more muted (duration and extent) cool ENSO
+    composites may reflect imperfect removal of warming trends.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/basin-mean-tropics-composite-window.pdf}
+  \caption{Area-weighted basin composites
+      of temperature.}
+  \label{fig:basin-composite}
+\end{figure}
+ 
+    
+
+Warm ENSO tropical mean temperature composites peak in
+      February while cool ones show a less well defined peak in
+      January--February. Temperatures outside the tropical Pacific are responsible
+      for this timing. All the remote sector warm ENSO temperature composites peak
+      in February except the South America one.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-cor-with-seasonality-2-lines-regional.pdf}
+  \caption{Lag correlations of Nino-3.4
+      with basin-averaged temperature.}
+  \label{fig:basin-corr}
+\end{figure}
+ 
+    
+
+Lagged correlations give the same story as the composites. Peak in tropical Atlantic and Africa averages. Regression versions in Fig.\ \ref{fig:basin-reg}. Chiclet versions in Figs.\ \ref{fig:basin-corr-2} and
+      \ref{fig:basin-reg-2}.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-ssr.pdf}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-slhf.pdf}
+  \caption{Composites of tropical mean (a, c) surface net solar radiation
+      and (b, d) surface latent heat flux anomaly from June (year 0)
+      through September (year +1) during warm and (b) cool ENSO
+      years. (Coarsened to five degree in longitude). White (black)
+      dots indicate statistical significance at the 5\% (1\%)
+      level. Dashed lines in panels b and d show Indian (green), South
+      China Seas (purple), tropical Pacific (red), South America
+      (orange), tropical Atlantic (blue), and Africa (olive)
+      sectors.}
+  \label{fig:flux_composites_solar_latent}
+\end{figure}
+
+Figure~\ref{fig:flux_composites_solar_latent} shows composites
+    of surface net solar radiation (panels a, c) and surface latent
+    heat flux (panels b, d), which are the dominant individual
+    components of the net radiative and net heat flux composites,
+    respectively (Fig.\ \ref{fig:flux_composites}). Latent heat flux is the dominant component of the net
+    turbulent heat flux (sensible heat flux being secondary over
+    tropical oceans due to the relatively small tropical air–sea
+    temperature contrast). The warm and cool ENSO composites are approximately
+    antisymmetric, consistent with a roughly linear atmospheric
+    response to ENSO-related SST forcing. During warm ENSO, net solar radiation in the tropical Pacific
+    is significantly reduced east of the date line during the peak of
+    the ENSO cycle, coinciding with enhanced deep convection and
+    increased cloud cover over anomalously warm SSTs and a shifted
+    rising branch of the Walker circulation (see Fig.\
+    \ref{fig:tcc_omega500_composites} for ENSO composites of cloud
+    cover and omega 500). The descending circulation to the west
+    accompanies increases in solar radiation. West of 150E solar radiation anomalies are significantly
+    positive September--March together with reduced cloud cover and
+    enhanced ascending motion. This confirms the cloud--shortwave
+    mechanism as the radiative pathway of the atmospheric bridge to
+    the eastern Indian Ocean and South China Sea
+    \citep{Klein1999remote}. Surface latent heating in the tropical Pacific around 120W is
+    mostly a negative feedback on ENSO SST anomalies due to increased
+    evaporative heat loss from the warmer ocean surface, which
+    counteracts weakened trades.
+
+    In the eastern Indian Ocean and South China Sea, weakened trades
+    during warm ENSO conditions reduce evaporation and increase latent
+    heating but are limited to November and December. They weaker and
+    less extensively significant than the solar radiation anomalies in
+    the same sector. This indicates that the radiative
+    (cloud--shortwave) pathway is the larger contributor to Indian
+    Ocean warming, with the wind--evaporation pathway playing a
+    supporting role. Over the tropical Atlantic latent heat flux anomalies are
+    positive during boreal December through February, with SST
+    expected to follow at a lag. There is essentially no solar
+    radiation signal over the Atlantic, indicating that the
+    atmospheric bridge to the tropical Atlantic operates primarily
+    through the evaporative pathway rather than the cloud--radiative
+    pathway. The warm and cool surface latent heating composites are
+    similar over the Atlantic even though the temperature ones in
+    Fig.\ \ref{fig:composite}are not. Maps of the correlation of Nino-3.4 with surface net solar
+    radiation and surface latent heat flux by month to confirm
+    seasonality maps are shown in Figs.\ \ref{fig:bridge-ind} and
+    \ref{fig:bridge-atl}.
+
+\section{Conclusions and discussion}
+
+In early 2026, the WMO noted ``The most recent El Ni\~no, in
+    2023-24, was one of the five strongest on record and it played a
+    role in the record global temperatures we saw in 2024''
+    \citep{WMO2026enso}.
+
+NOAA Extended Reconstructed SST V5 (ERSSTv5) data are provided
+  by the NOAA PSL, Boulder, Colorado, USA, from their website
+  \url{https://psl.noaa.gov}. NOAAGlobalTemp version 6.1 data are
+  from \url{https://www.ncei.noaa.gov/data/noaa-global-surface-temperature/v6.1/access/gridded/NOAAGlobalTemp_v6.1.0_gridded_s185001_e202602_c20260308T114550.nc}. ERA5 data are available from the Climate Data Store
+  \url{https://cds.climate.copernicus.eu/}.
+
+\bibliographystyle{ametsocV6}
+  \bibliography{all}
+
+\section{Supplemental/not shown}
+
+\renewcommand\thefigure{S\arabic{figure}}
+
+\setcounter{figure}{0}
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/map-of-boxes.pdf}
+  \caption{}\label{fig:map-box}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-maps.png}
+  \caption{Lag correlation of Nino-3.4 with 2m
+      temperature. White (black) dots indicate statistical
+      significance at the 5\% (1\%) level. The global mean of the
+      correlation is shown in the title with bold indicating the lag
+      with maximum value for that start
+      month.}
+  \label{fig:no-seasonality-cor-map}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-maps-diff.png}
+  \caption{Lag correlation of Nino-3.4 with
+      temperature \textbf{tendencies}. White (black) dots indicate
+      statistical significance at the 5\% (1\%) level. The global mean
+      of the correlation is shown in the title with bold indicating
+      the lag with maximum value.}
+  \label{fig:no-seasonality-cor-map-diff}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-with-seasonality-2-target.pdf}
+  \caption{Lag correlations as a function of
+      start month and target month of Nino-3.4 with (a) tropical mean
+      temperature, (b) detrended tropical mean temperature, (c) global
+      mean temperature, (d) detrended global mean temperature. White
+      (black) dots indicate statistical significance at the 5\% (1\%)
+      level. Detrended analysis detrends both time
+      series.}
+  \label{fig:corr-with-seasonality-chiclet}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-with-ave-seasonality-mini.pdf}
+  \caption{All-months lag correlations and
+      averages of month-dependent lag correlations of Nino-3.4 with
+      (a) tropical mean temperature and (b) global mean
+      temperature. Results for detrended time series are shown in dark
+      colors.}
+  \label{fig:pooled-vs-ave}
+\end{figure}
+
+  
+   
+    
+
+The average of the month-dependent lag correlations matches
+      well the all-month lag correlations (Fig.\
+      \ref{fig:pooled-vs-ave}). Math says it doesn't have to work out so nicely but it
+      happens to. Previously reported peaks at lag-3 for global mean
+      temperature are only correct in an average (sloppy) sense that
+      obscures what is really going on.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-reg-with-seasonality-2-lines-regional.pdf}
+  \caption{Lag regression of Nino-3.4
+      with basin averaged temperature.}
+  \label{fig:basin-reg}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-corr-with-seasonality-2-target-regional.pdf}
+  \caption{Lag correlations of Nino-3.4
+      with basin averaged temperature.}
+  \label{fig:basin-corr-2}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/lag-reg-with-seasonality-2-target-regional.pdf}
+  \caption{Lag regressions of Nino-3.4
+      with basin averaged temperature.}
+  \label{fig:basin-reg-2}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-sr.pdf}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-shf.pdf}
+  \caption{Composites of tropical mean (a, c) net surface radiation
+      (shortwave plus longwave) and (b, d) surface heat flux (latent
+      plus sensible) anomaly from June (year 0) through September
+      (year +1) during warm and (b) cool ENSO years. (Coarsened to
+      five degree in longitude). White (black) dots indicate
+      statistical significance at the 5\% (1\%) level. Dashed lines in
+      panels b and d show Indian (green), South China Seas (purple),
+      tropical Pacific (red), South America (orange), tropical
+      Atlantic (blue), and Africa (olive)
+      sectors.}
+  \label{fig:flux_composites}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-tcc.pdf}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/mean-tropics-composite-window-omega500.pdf}
+  \caption{Composites of tropical mean (a, c) total cloud cover and (b, d)
+      omega 500 from June (year 0) through
+      September (year +1) during warm and (b) cool ENSO
+      years. (Coarsened to five degree in longitude). White (black)
+      dots indicate statistical significance at the 5\% (1\%)
+      level. Dashed lines in panels b and d show Indian (green), South
+      China Seas (purple), tropical Pacific (red), South America
+      (orange), tropical Atlantic (blue), and Africa (olive)
+      sectors.}
+  \label{fig:tcc_omega500_composites}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/map-surface-net-solar-radiation-n34-corr-indo.png}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/map-surface-latent-heat-flux-n34-corr-indo.png}
+  \caption{}
+  \label{fig:bridge-ind}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/map-surface-net-solar-radiation-n34-corr-atl.png}
+  \includegraphics[width=0.49\linewidth]{/Users/tippett/notebooks/NMME/enso-t2m-figures/map-surface-latent-heat-flux-n34-corr-atl.png}
+  \caption{}
+  \label{fig:bridge-atl}
+\end{figure}
+
+\end{document}

@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""
+run_tests.py — regression checks for beamer_to_agu.py and beamer_to_manuscript.py
+
+Runs both converters on tests/test_input.tex and asserts required strings/patterns
+are present (or absent) in the output.  Exit code 0 = all pass, 1 = any failure.
+
+Usage:
+    python tests/run_tests.py          # from repo root
+    python run_tests.py                # from tests/
+"""
+
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+TESTS_DIR   = Path(__file__).parent
+SCRIPTS_DIR = TESTS_DIR.parent / 'scripts'
+INPUT       = TESTS_DIR / 'test_input.tex'
+PYTHON      = sys.executable
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_failures = []
+
+def check(name, text, pattern, present=True, flags=0):
+    found = bool(re.search(pattern, text, flags))
+    ok    = found if present else not found
+    if not ok:
+        adj = 'present' if present else 'absent'
+        _failures.append(f'  FAIL  {name}: expected {adj}: {pattern!r}')
+    return ok
+
+
+def run_converter(script, output_tex):
+    result = subprocess.run(
+        [PYTHON, str(SCRIPTS_DIR / script), str(INPUT), str(output_tex)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        _failures.append(f'  FAIL  {script} exited {result.returncode}:\n{result.stderr}')
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# AGU checks
+# ---------------------------------------------------------------------------
+
+def check_agu(text):
+    # --- preamble metadata ---
+    check('AGU docclass',              text, r'\\documentclass.*agujournal2019')
+    check('journal name',              text, r'\\journalname\{Geophysical Research Letters\}')
+    check('author One affil 1',        text, r'Author One\\affil\{1\}')
+    check('author Two affil 2',        text, r'Author Two\\affil\{2\}')
+    check('author Three affil 1',      text, r'Author Three\\affil\{1\}')
+    check('affiliation 1 text',        text, r'\\affiliation\{1\}\{Department of Atmospheric Science')
+    check('affiliation 2 text',        text, r'\\affiliation\{2\}\{Institute of Oceanography')
+    check('corresponding author name', text, r'\\correspondingauthor\{Author One\}')
+    check('email sentinel',            text, r'author@university\.edu')
+    check('amsmath pkg',               text, r'\\usepackage\{amsmath\}')
+    check('amssymb pkg',               text, r'\\usepackage\{amssymb\}')
+    check('bm pkg',                    text, r'\\usepackage\{bm\}')
+    check('bibliographystyle absent',  text, r'\\bibliographystyle', present=False)
+
+    # --- special AGU preamble sections ---
+    check('keypoints block',           text, r'\\begin\{keypoints\}')
+    check('keypoint 1',                text, r'Conversion pipeline correctly')
+    check('PLS section',               text, r'\\section\*\{Plain Language Summary\}')
+    check('PLS text',                  text, r'Scientific papers often begin')
+    check('abstract block',            text, r'\\begin\{abstract\}')
+    check('abstract text',             text, r'Beamer-to-manuscript conversion')
+
+    # --- citation remapping (natbib → apacite) ---
+    check('citet→citeA',               text, r'\\citeA\{wheeler2004\}')
+    check('citep→cite',                text, r'\\cite\{madden1971\}')
+    check('citep[post]→cite[post]',    text, r'\\cite\[e\.g\.,\]\{vitart2017\}')
+    check('citet[pre][post]→citeA<>',  text, r'\\citeA<see>\[their Fig')
+    check('citet[][post]→citeA[post]', text, r'\\citeA\[p\.~5\]\{jones2019\}')
+    check('citep[pre][post]→cite<>[]', text, r'\\cite<cf\.>\[Table~2\]\{brown2021\}')
+    check('no raw \\citet',            text, r'\\citet\{', present=False)
+    check('no raw \\citep',            text, r'\\citep\{', present=False)
+
+    # --- equation wrapping (linenomath*) ---
+    check('linenomath* + equation',    text, r'\\begin\{linenomath\*\}\s*\\begin\{equation\}')
+    check('linenomath* + align',       text, r'\\begin\{linenomath\*\}\s*\\begin\{align\}')
+    check('linenomath* + \\[',         text, r'\\begin\{linenomath\*\}\s*\\\[')
+
+    # --- body content ---
+    check('intro section',             text, r'\\section\{Introduction\}')
+    check('methods section',           text, r'\\section\{Methods\}')
+    check('results section',           text, r'\\section\{Results\}')
+    check('conclusions section',       text, r'\\section\{Conclusions\}')
+    check('figure environment',        text, r'\\begin\{figure\}')
+    check('table environment',         text, r'\\begin\{tabular\}')
+
+    # --- endmatter sentinels ---
+    check('open research section',     text, r'\\section\*\{Open Research Section\}')
+    check('open research content',     text, r'zenodo\.org/record/test')
+    check('COI section',               text, r'\\section\*\{Conflict of Interest\}')
+    check('acknowledgments cmd',       text, r'\\acknowledgments')
+    check('acks content',              text, r'NSF grant AGS-0000000')
+    check('bibliography',              text, r'\\bibliography\{refs\}')
+
+    # --- SI header ---
+    check('SI clearpage+counter',      text, r'\\clearpage\s+\\setcounter\{page\}\{1\}')
+    check('SI title',                  text, r'Supporting Information for')
+    check('SI figures S1 to S2',       text, r'\\item Figures S1 to S2')
+    check('SI table S1 singular',      text, r'\\item Table S1')
+    check('SI text commented out',     text, r'%\\item Text S1 to Sx')
+
+
+# ---------------------------------------------------------------------------
+# AMS checks
+# ---------------------------------------------------------------------------
+
+def check_manuscript(text):
+    # --- preamble metadata ---
+    check('AMS docclass',              text, r'\\documentclass\{ametsocV6\.1\}')
+    check('author One aff a',          text, r'Author One\\aff\{a\}')
+    check('author Two aff b',          text, r'Author Two\\aff\{b\}')
+    check('author Three aff a',        text, r'Author Three\\aff\{a\}')
+    check('affiliation aff{a} text',   text, r'\\aff\{a\}\{Department of Atmospheric Science')
+    check('affiliation aff{b} text',   text, r'\\aff\{b\}\{Institute of Oceanography')
+    check('corresponding author',      text, r'\\correspondingauthor\{')
+    check('amsmath pkg',               text, r'\\usepackage\{amsmath\}')
+    check('bm pkg',                    text, r'\\usepackage\{bm\}')
+    check('bibliographystyle kept',    text, r'\\bibliographystyle\{plainnat\}')
+
+    # --- abstract ---
+    check('abstract command',          text, r'\\abstract\{')
+    check('abstract text',             text, r'Beamer-to-manuscript conversion')
+
+    # --- body ---
+    check('intro section',             text, r'\\section\{Introduction\}')
+    check('methods section',           text, r'\\section\{Methods\}')
+    check('results section',           text, r'\\section\{Results\}')
+    check('figure environment',        text, r'\\begin\{figure\}')
+    check('table environment',         text, r'\\begin\{tabular\}')
+    check('bibliography',              text, r'\\bibliography\{refs\}')
+
+    # --- no AGU-specific transforms ---
+    check('no \\citeA',                text, r'\\citeA\{',         present=False)
+    check('no linenomath',             text, r'linenomath',         present=False)
+    check('no keypoints env',          text, r'\\begin\{keypoints\}', present=False)
+    check('no AGU journalname',        text, r'\\journalname\{',    present=False)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    if not INPUT.exists():
+        sys.exit(f'Test input not found: {INPUT}')
+
+    converters = [
+        ('AGU',  'beamer_to_agu.py',        check_agu),
+        ('AMS',  'beamer_to_ams.py',        check_manuscript),
+    ]
+
+    total_fail = 0
+
+    for label, script, checker in converters:
+        print(f'\n=== {label} ({script}) ===')
+
+        with tempfile.NamedTemporaryFile(suffix='.tex', delete=False) as f:
+            out = f.name
+
+        before = len(_failures)
+        if not run_converter(script, out):
+            print(_failures[-1])
+            total_fail += 1
+            continue
+
+        checker(Path(out).read_text())
+        new_failures = _failures[before:]
+        if new_failures:
+            for msg in new_failures:
+                print(msg)
+            total_fail += len(new_failures)
+        else:
+            print('  all checks passed')
+
+    print(f'\n{"All tests passed." if total_fail == 0 else f"{total_fail} failure(s) total."}')
+    sys.exit(0 if total_fail == 0 else 1)
+
+
+if __name__ == '__main__':
+    main()

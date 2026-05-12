@@ -1,0 +1,630 @@
+\documentclass[draft]{agujournal2019}
+\usepackage{url}
+\usepackage{lineno}
+\linenumbers
+
+%% Journal name — change to match target journal
+%% Options: JGR Atmospheres, JGR Oceans, GRL, GC Cubed, etc.
+\journalname{JGR: Atmospheres}
+
+\begin{document}
+
+\title{ENSO-conditioned evolution of global mean surface temperature}
+
+\authors{{{AUTHOR NAME}}\affil{1}}
+
+\affiliation{1}{Department, Institution, City, Country}
+
+\correspondingauthor{{{AUTHOR NAME}}}{email@institution.edu}
+
+\begin{keypoints}
+\item Key point 1 here (under 140 characters)
+\item Key point 2 here (under 140 characters)
+\item Key point 3 here (under 140 characters)
+\end{keypoints}
+
+\begin{abstract}
+ENSO forecasts are skillful, and the influence of ENSO on global
+  mean surface temperature (GMST) is well established. These facts
+  suggest that future GMST behavior can be anticipated based on future
+  expected ENSO conditions. Here we examined how well the June--May trajectory of monthly
+  GMST can be anticipated from information available near the beginning of June. The information we used were recent GMST evolution and the
+  Nino-3.4 values expected during the upcoming boreal winter. Principal component analysis and dimension reduction of both GMST and
+  Nino-3.4 data simplified the problem greatly. Further simplifications based on the empirical orthogonal
+  function structure led to a simple, interpretable model in which the
+  June--May trajectory of monthly GMST is conditioned on the average
+  of prior 12 months and the expected December value of Nino-3.4. We found that an expected December Nino-3.4 anomaly of
+  1\textdegree C is associated a GMST increase from the value of the
+  previous year of about 0.025\textdegree C in boreal summer and a
+  peak increase of about 0.1\textdegree C in the following February.
+\end{abstract}
+
+\section*{Plain Language Summary}
+Changes in global mean surface temperature (GMST) changes are due to
+  both anthropogenic and natural forcing as well as natural
+  variability, with El Niño-Southern Oscillation (ENSO) being the
+  dominant contributor from natural variability. In this study, we
+  examined how much of the coming June-to-May evolution of global mean
+  temperature can be anticipated from two pieces of information
+  available in advance: the recent global temperature level and the
+  expected state of ENSO over the same period. We found in a simple
+  model that an expected December Nino-3.4 anomaly of 1\textdegree C
+  is associated a GMST increase of about 0.025\textdegree C in boreal
+  summer and a peak increase of about 0.1\textdegree C in the
+  following February.
+
+\section{Introduction}
+
+Global mean surface temperature (GMST) is trending upward due
+    to human-caused increases in greenhouse gases. Superimposed on
+    this upward trend, GMST also varies in response to natural forcing
+    (e.g., volcanoes) and internal variability. ENSO is the dominant component of internal variability on
+    seasonal timescales, and its influence on GMST is well established
+    \cite<e.g.,>[]{Trenberth2002evolution}. During warm ENSO
+    conditions (El Ni\~no) GMST tends to be elevated relative to the
+    long-term trend, while during cool ENSO conditions (La Ni\~na),
+    the opposite tends to occur. \citeA{Lean2008natural} attributed about 0.23\textdegree C of
+    GMST warming to the 1997 ``super'' El Ni\~no in June to November
+    of that year. The World Meteorological Organization recently noted ``The
+    most recent El Ni\~no, in 2023-24, was one of the five strongest
+    on record and it played a role in the record global temperatures
+    we saw in 2024'' \cite{WMO2026enso}.
+
+  
+ENSO is predictable several seasons in advance. Each month
+    meteorological and climate forecast centers around the world issue
+    operational ENSO forecasts that extend typically two to four
+    seasons into the future.  ENSO forecasts issued after the boreal
+    spring predictability barrier are especially skillful
+    \cite<e.g.,>[]{Heureux:Chapter}. In early 2026, forecasts of a strong El Nino have led to
+    speculation in the press that it could boost GMST by about
+    0.2\textdegree C \cite<e.g.,>[]{KeithLucas2026SuperElNino}.
+    While this estimate appears plausible, exactly how a given
+    forecast of ENSO conditions translates into an expected GMST
+    anomaly is less clear, both in terms of timing and amplitude. For instance, it remains difficult to say, in a quantitative
+    and principled manner, what GMST evolution is expected over the
+    next 12 months given its recent values and the ENSO conditions
+    forecast for this winter. One reason for this difficulty is that previous analyses
+    either pooled all months together \cite{Trenberth2002evolution}
+    or focused on the ENSO–GMST relationship only at the lag at which
+    the correlation is strongest
+    \cite{Lean2008natural,Foster2011global}.
+
+  
+  
+Here, we address this gap and present a simple and
+    interpretable methodology for anticipating GMST evolution at
+    monthly resolution over the June--May 12-month period, given a
+    forecast of ENSO conditions over the same period.  We chose this
+    period because ENSO forecasts initialized after boreal spring
+    typically have useful skill through the following winter. We conditioned our analysis on observed ENSO evolution and
+    acknowledge imperfect ENSO forecasts as an additional source of
+    uncertainty, analogous to the perfect-prog framework in weather
+    output statistics \cite{Glahn72,Klein1959objective}. Data sources and statistical methods are described in Section
+    \ref{sec:data-methods}.  Section \ref{sec:results} introduces our
+    data-compression strategies and a sequence of regression models,
+    progressing from general formulations to simpler ones that are
+    more interpretable and nearly as skillful. We also show why these
+    successive model reductions are physically and statistically well
+    motivated, and evaluate model performance using hindcasts and
+    summary skill measures. Conclusions and discussion are given in
+    Section \ref{sec:summary}.
+
+\section{Data and Methods}\label{sec:data-methods}
+
+Our analysis used monthly data from June 1979 through May
+    2025, comprising 46 June--May ENSO years. Global mean surface temperature (GMST) was computed as the
+    area-weighted global mean of gridded surface temperature from NOAA
+    GlobalTemp v6.1.0 \cite{Huang2022improvements}. NOAA GlobalTemp
+    uses the current WMO climatological standard normals period,
+    1991--2020, as the reference period for temperature anomalies. Its
+    1850--1900 mean is $-0.77^\circ$C, and this value was subtracted
+    to form the preindustrial anomalies shown in the figures. The Niño-3.4 index was computed from ERSSTv5
+    \cite{Huang:ERSST5} as the area-weighted sea surface temperature
+    over 5\textdegree S--5\textdegree N, 170\textdegree
+    W--120\textdegree W.  Anomalies are shown relative to the
+    1991--2020 base period.
+
+Principal component analysis (PCA) was applied to the
+    $12 \times 46$ Niño-3.4 and GMST data matrices after removal of
+    monthly means (row averages). In the data matrices, rows
+    correspond to months and columns to years. Double-centered PCA was applied to the same $12 \times 46$
+    Niño-3.4 and GMST data matrices after removal of both monthly
+    means (row averages) and June--May means (column averages). We followed the PCA convention in which principal components
+    (PCs) have unit variance and empirical orthogonal functions (EOFs)
+    carry the physical units \cite{DelsoleTippettBook}. Data were reconstructed as the product of EOFs and PCs, with
+  the removed means added back. Coefficient of determination ($R^2$), root-mean-square error
+  (RMSE), and mean-squared-error skill score (MSESS) were used as
+  summary measures of regression model performance. Statistical significance of differences in RMSE was assessed
+    using the Wilcoxon signed-rank test applied to paired squared
+    errors. Because the RMSE values were computed using the same GMST
+    data, RMSE values for different models are not independent, and an
+    $F$-test for equality of variances is inappropriate
+    \cite{TDS:Comparing:2014}. The Wilcoxon signed-rank test
+    effectively tests whether the median difference squared errors is
+    zero. Statistical significance for RMSE and MSESS is identical
+    because MSESS is a monotonic function of RMSE.
+
+\section{Results}\label{sec:results}
+
+A regression model that included all plausible predictors and
+    predictands would be high-dimensional: 24 predictors and 12
+    predictands. The predictors would be the previous 12 months of
+    GMST together with the next 12 months of Niño-3.4, while the
+    predictands would the next 12 months of GMST. Such a model would
+    be prone to overfitting and difficult to interpret. Therefore, as
+    a first step, we applied principal component analysis (PCA) to the
+    data. PCA provides an unsupervised and systematic dimension
+    reduction that is based on explained variance and ignores
+    relationships between predictors and predictands. Previous work has shown that 12-month Nino-3.4 trajectories
+    are well approximated by one or two PCs, both in observations and
+    in seasonal forecasts \cite{Bunge2009verified,Tippett2019:ENSO}.
+    Consistent with these results, we found that approximately 95\% of
+    the variability of June--May Nino-3.4 segments is explained by the
+    first two PCs (Fig.\ \ref{fig:EOF-variance-explained}a). Moreover, we found that the same is true of
+    GMST---approximately 95\% of the variability of a June--May GMST
+    trajectory is explained by the first two PCs (Fig.\
+    \ref{fig:EOF-variance-explained}b).
+
+  
+We now examine the EOFs that go with those PCS. EOF1 of Niño-3.4 peaks in December, reflecting the seasonal
+    phase locking of ENSO (Fig.\ \ref{fig:fig1}a).  The correlation of
+    PC1 of Nino-3.4 with the December Nino-3.4 index exceeds 0.98
+    (compare PC1 of Nino-3.4 with the standardized value of December
+    Nino-3.4 in Fig.\ \ref{fig:fig1}c).  EOF2 of Niño-3.4 is a dipole
+    in time centered on December and can account for shifts of the
+    Nino-3.4 peak away from December. EOF1 of GMST is nearly uniform across months (Fig.\
+    \ref{fig:fig1}b), while PC1 of GMST shows a clear upward trend
+    (Fig.\ \ref{fig:fig1}d). This behavior indicates PC1 represents
+    the uniform (across calendar months) upward trend of GMST. EOF2 of GMST is nearly uniform and negative June--November
+    until it rises in December and peaks in January and February,
+    while PC2 shows no visible trends. This behavior suggested that
+    PC2 might represent the well-known delayed response of GMST to
+    ENSO via the atmospheric bridge
+    \cite{Alexander2002atmospheric,Klein1999remote}. Reconstructions of Nino-3.4 and GMST show that 2 EOFs are
+    adequate to capture interannual variability ($R^2$ values of about
+    95\%; Fig.\ \ref{fig:fig1}e, f), although more unresolved
+    subannual variability remains visible in the GMST time series than
+    in the Niño-3.4 time series. The two-PC reconstruction of GMST
+    sets an upper bound on the possible accuracy of a two-PC model.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/eofs_pcs.pdf}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/reconstruction_2pc.pdf}
+  \caption{The leading two EOFs of June--May segments of
+      (a) Nino-3.4 and (b) global mean surface temperature (GMST). The
+      corresponding leading two PCs of (c) Nino-3.4 and (d) GMST.  The
+      standardized December value of Nino-3.4 is also shown in panel
+      (c) for comparison with PC1. Two-PC reconstructions of (e)
+      Nino-3.4 and (f) GMST with root mean squared error (RMSE) and
+      R-squared values in the title.}
+  \label{fig:fig1}
+\end{figure}
+
+We next examined the cross correlations and lag correlations of
+    the first two PCs of Niño-3.4 and GMST. The strongest simultaneous correlation is the 0.61 correlation
+    between N34-PC1 and GMST-PC2, which supports our hypothesis that
+    GMST-EOF2 represents the delayed GMST response to ENSO
+    (Fig. \ref{fig:fig2}a). The other simultaneous cross-correlations are
+    weak ($R^2 < 4\%$). The strongest lagged relation between PCs is the 0.92
+    correlation between GMST-PC1$(t)$ and GMST-PC1$(t+1)$ which
+    reflects the upward trend in GMST-PC1 and the resulting strong
+    year-to-year persistence (Fig. \ref{fig:fig2}b).  In contrast, the
+    lag-1 autocorrelation of GMST-PC2 is small and negative
+    ($r=-0.18$), consistent with the interpretation of GMST-PC2 as an
+    ENSO response that does not persist from one year to the next. The source of the correlation of N34-PC2$(t)$ with
+    N34-PC1$(t+1)$ is less obvious, though it is visually evident in
+    the PC time series for both warm and cool ENSO events (Fig.\
+    \ref{fig:fig1}c). \textbf{Thoughts?}. The correlation between N34-PC2$(t)$ and GMST-PC2$(t+1)$
+    ($r=0.37$) is explained almost entirely by the pathway
+    N34-PC2$(t) \rightarrow$ N34-PC1$(t+1) \rightarrow$
+    GMST-PC2$(t+1)$. After accounting for N34-PC1$(t+1)$, the partial
+    correlation between N34-PC2$(t)$ and GMST-PC2$(t+1)$ is only 0.04. The correlation analysis above suggests that little is lost by
+    using two predictors, GMST-PC1$(t)$ and N34-PC1$(t+1)$, instead of
+    four, GMST-PC1$(t)$, GMST-PC2$(t)$, N34-PC1$(t+1)$, and
+    N34-PC2$(t+1)$. Indeed, the fit obtained with these two predictors
+    is nearly identical to that obtained with all four predictors
+    (compare Figs.\ \ref{fig:fig2}c and
+    \ref{fig:fit_full_recon}). Moreover, in the four-predictor model,
+    only the coefficients of GMST-PC1$(t)$ and N34-PC1$(t+1)$ are
+    large and statistically significant (Table \ref{tab:full_model}).
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/pc_correlations.pdf}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/fit_reduction1.pdf}
+  \caption{Panel (a) cross correlations (simultaneous)
+      between the first two PCs of Nino-3.4 and and global mean
+      surface temperature (GMST). Panel (b) cross correlations
+      (one-year lag) between the first two PCs of Nino-3.4 and
+      GMST. Panel (c) shows the fit of GMST time series by the two-PC
+      model (see text for details). Dots show the start of June--May
+      segments. The RMSE and R-squared of the four-PC model is shown
+      in the title for comparison.}
+  \label{fig:fig2}
+\end{figure}
+
+While the two-PC predictor model is both effective and
+    parsimonious, there are further simplifications that can improve
+    interpretability. In particular, the predictors GMST-PC1$(t-1)$ and N34-PC1$(t)$
+    are defined through the PCA and therefore depend on both the
+    specific data used and the details of the PCA
+    calculation. Replacing them with quantities that closely
+    approximate them, but whose calculation is more transparent, would
+    yield a more explainable model. In the first simplification, we replaced N34-PC1 with the
+    December Niño-3.4 value, which correlates with N34-PC1 at $r=0.99$
+    (Fig.\ \ref{fig:fig1}c). This close correspondence follows from
+    the EOF structure: EOF1 peaks in December, while EOF2 is close to
+    zero in December. The resulting model performs essentially as well as the two-PC
+    predictor model (Fig.\ \ref{fig:fit_r2_recon}) while being easier
+    to interpret. In particular, the dependence of GMST on ENSO can
+    now be described without reference to PCs, for example: ``given
+    December Niño-3.4 $=x$, the anticipated June--May GMST trajectory
+    is \ldots''. For the second simplification, we replaced GMST-PC1. Recall
+    that GMST-EOF1 is nearly uniform across months, which suggests a
+    decomposition in which the first mode is simply the June--May mean
+    GMST (which we call the level), while the second mode captures as
+    much as possible of the remaining month-to-month structure and is
+    therefore expected to resemble GMST-PC2. We implemented this idea by decomposing each June--May GMST
+    trajectory into its June--May level together with a PCA of the
+    departures from that mean. Because this decomposition removes both
+    monthly means and June--May segment means, we call it
+    double-centered PCA. Double-centered PCA is not variance-optimal so its modes
+    explain less variance, but the loss is small: the variance
+    explained by the first two modes decreases from 94.8\% to 94.3\%
+    (Fig.\ \ref{fig:EOF-variance-explained-dc}). The leading EOF from
+    the double-centered decomposition is similar to GMST-EOF2 (Fig.\
+    \ref{fig:fig3}a), and the corresponding PC is also similar to
+    GMST-PC2, with correlation 0.993 (Fig.\ \ref{fig:fig3}b). We call the model with these two simplifications (N34-PC1
+    replaced by December Nino-3.4 and GMST-PC1 replaced by level), the
+    simplified model. The performance of the  simplified model is nearly
+    identical to that of the two-PC predictor model (Fig.\
+    \ref{fig:fig3}c). The simplified model improves interpretability by enabling
+    statements of the form: ``given recent GMST level $\bar{g}$ and
+    December Niño-3.4 $=x$, the June--May GMST trajectory is \ldots''.
+
+  
+A remaining question is how much is gained by conditioning on
+    ENSO. Because of the strong upward trend in GMST,
+    persistence-based predictions are already a nontrivial
+    benchmark. We therefore compared the simplified model with two
+    persistence baselines: one based on the preceding June--May mean 
+    and one based on the preceding May GMST value. The simplified model has lower RMSE than the June--May-mean
+    baseline in every month and lower RMSE than the May baseline from
+    August through May (Fig.\ \ref{fig:fig3}d). Its clearest and most
+    statistically robust advantage occurs from December through May,
+    when the delayed GMST response to ENSO is expected to be
+    strongest. The corresponding MSE skill scores show that the simplified
+    model improves substantially on both persistence baselines, with
+    the largest gains generally occurring during boreal winter and
+    spring (Fig.\ \ref{fig:fig3}e).
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/eofs_pcs_dc.pdf}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/fit_idea2.pdf}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/rmse_by_month.pdf}
+  \caption{Comparison of the standard (a) EOFS and (b) PCs
+      of global mean surface temperature (GMST) with double-centered
+      ones. Panel (c) shows the fit of GMST time series by the
+      simplified model (see text for details). (d) RMSE and MSESS of
+      the simplified model compared to persistence
+      baselines.}
+  \label{fig:fig3}
+\end{figure}
+
+Summary performance metrics are informative, but they do not
+  show what the simplified model looks in individual years.
+  To address this point, Figs.\ \ref{fig:fig4}a--f shows
+  representative hindcasts for several recent years together with
+  an illustrative conditional forecast for 2026--27. The prediction intervals are fairly wide, but in most cases
+  they provide a reasonable characterization of uncertainty. In the cool ENSO years shown (2007, 2010, and 2020), both
+  the simplified model and the observed GMST generally lie below
+  the level of the previous 12 months, with a pronounced dip
+  around January and a partial rebound by May. The amplitude of
+  the simplified model is smaller than that of the observed GMST,
+  as expected from a regression model; in particular, the
+  relevant coefficient of determination is only $R^2=0.40$
+  (Table \ref{tab:model-sm}). In the warm ENSO cases, the behavior is broadly opposite,
+  with elevated GMST during boreal winter and early spring.
+  An important exception is 2023--24, when the sharp warming in
+  September is not consistent with the expected timing of the
+  delayed ENSO influence and lies outside the prediction
+  intervals. An attractive feature of the simplified model is that, once
+  the recent GMST level is specified, the month-to-month shape of
+  the predicted GMST response depends only on December
+  Niño-3.4. In particular, the seasonal pattern is fixed and only
+  its amplitude changes with the December Niño-3.4 value. This structure makes it straightforward to describe the GMST
+  response to a specified ENSO condition. Figure \ref{fig:fig4}g
+  shows the implied June--May GMST response per
+  $+1^\circ$C of December Niño-3.4. The response is about
+  $0.025^\circ$C during boreal summer, rises sharply beginning in
+  December, and peaks at slightly more than $0.10^\circ$C in
+  February. The same analysis can be carried out using relative
+  Niño-3.4, or RONI \cite{LHeureux2024relative}. The implied
+  GMST response is very similar, although slightly weaker in
+  amplitude, consistent with relative Niño-3.4 being somewhat
+  smaller than standard Niño-3.4 during warm ENSO conditions. We also show an illustrative 2026--27 GMST trajectory based
+  on the currently observed June 2025--February 2026 mean of
+  1.26$^\circ$C above 1850--1900 together with an assumed
+  December 2026 Niño-3.4 value of $+2.0^\circ$C. Under these conditions, the predicted trajectory peaks at
+  about 1.51$^\circ$C above preindustrial in February 2027,
+  close to the expected seasonal peak of ENSO influence.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/hindcast_panels.pdf}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/forecast.pdf}
+  \caption{Observed June--May global mean surface
+      temperature (GMST) and simple model fits for (a) 2007-8, (b)
+      2009-10, (c) 2010-11, (d) 2015-16, (e) 2020-21, and (f)
+      2023-24. Panel (g) shows a 2026-27 illustration for Dec 2026
+      Nino-3.4 of 2.0\textdegree C.}
+  \label{fig:fig4}
+\end{figure}
+
+\section{Summary and discussion}\label{sec:summary}
+
+Summarize the main findings in reverse order. Start with the
+    ending and explain how we got there. Implications. 2023-24. How the work here differs from the fitting approaches of
+    \citeA{Lean2008natural} and \citeA{Foster2011global}. A paragraph about prediction of GMST with seasonal climate
+    models and the problems that \citeA{Tippett2024trends} found
+    regarding multimodel too over dispersed and initialization
+    etc. https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2024GL110703. Future work: short lead forecasts should be more accurate. Is
+    this lost by doing the entire trajectory at once? Other ideas?
+
+Here we addressed the question of how much of the year-to-year
+  evolution of monthly GMST can be anticipated from
+  information available in advance, and in particular from the current
+  level of GMST and the expected state of ENSO. We end with a simple practical statement: given the recent
+  June--May mean GMST and the expected December
+  Niño-3.4 value, we can anticipate the full June--May evolution of
+  GMST. In that formulation, the recent GMST sets the
+  overall level of the next year's trajectory, while December
+  Niño-3.4 controls much of the within-year wintertime amplification. The resulting two-predictor model is both interpretable and
+  effective: it reproduces the main year-to-year evolution of global
+  mean temperature with skill nearly identical to less interpretable
+  PC-based formulations. That simple formulation was reached by first noting that the
+  leading EOF of GMST is nearly uniform across
+  months, so it is well represented by the June--May mean rather than
+  by a less transparent principal component. Likewise, the leading EOF of Niño-3.4 peaks in December, and its
+  leading PC is therefore almost equivalent to the December Niño-3.4
+  value itself. These simplifications worked because the June--May trajectories
+  of both Niño-3.4 and GMST are intrinsically
+  low-dimensional: two modes explain about 95\% of the variance in
+  each case. The cross-correlation structure then showed why a parsimonious
+  predictor set is sufficient: persistence in GMST
+  level carries information from one year to the next, while ENSO
+  primarily projects onto the delayed wintertime shape of the global
+  mean temperature trajectory. In physical terms, the analysis quantifies a familiar picture:
+  long-term warming sets the background state, and ENSO modulates the
+  timing and amplitude of departures from that background, especially
+  in boreal winter. Thus, much of the apparent complexity of monthly GMST evolution
+  can be reduced to a slowly varying level plus an ENSO-conditioned
+  seasonal shape.
+
+Unlike \citeA{Lean2008natural} and \citeA{Foster2011global},
+  which regress temperature on external explanatory indices, the
+  present approach is explicitly autoregressive: the recent GMST level
+  itself is the leading predictor of the next year's evolution. The most important difference is therefore that their fitting
+  frameworks do not use the recent temperature state itself as a
+  predictor, whereas here the prior June--May mean GMST carries
+  forward the slowly varying background state and sets the baseline
+  for the upcoming June--May trajectory. ENSO then enters as a second, physically interpretable predictor,
+  not simply as an explanatory covariate, but as a predictor of the
+  within-year departure from that baseline. In particular, our analysis exploits the seasonality of the ENSO
+  response: the effect of ENSO on GMST is not
+  uniform through the year, but is strongest in boreal winter, so the
+  expected December Niño-3.4 value helps determine the seasonal shape
+  of the upcoming temperature trajectory. Thus, the model separates two distinct sources of predictability:
+  persistence of the recent global temperature level and the seasonal,
+  lagged imprint of ENSO. A further difference is structural: rather than fitting
+  month-by-month temperature anomalies in calendar time, we model the
+  June--May trajectory as a whole and exploit its low-dimensional
+  structure. This yields a compact two-predictor forecast model with a clear
+  interpretation: the recent temperature mean sets the level, and the
+  expected December Niño-3.4 value shapes the seasonal departure from
+  that level, especially in boreal winter. In that sense, \citeA{Lean2008natural} and
+  \citeA{Foster2011global} are primarily explanatory or adjustment
+  frameworks, whereas the present work is an explicitly predictive,
+  autoregressive framework for anticipating the next year's monthly
+  GMST evolution.
+
+Initialized seasonal climate models provide a physically
+  self-consistent way to predict GMST, because they
+  evolve the coupled climate system forward rather than fitting global
+  mean temperature statistically after the fact. However, \citeA{Tippett2024trends} showed that current systems
+  still have important shortcomings for this problem, even though they
+  do exhibit skill beyond a simple trend baseline. In particular, much of that skill is tied to ENSO, but the
+  forecast quality depends strongly on season, forecast uncertainty is
+  sensitive to initialization, individual models tend to be
+  underdispersed at short lead, and the multimodel ensemble tends to
+  be overdispersed. The multimodel mean captures much of the broad evolution of
+  recent GMST, but it underestimated the record
+  warmth of 2023. Thus, seasonal climate models are powerful and physically
+  complete, but they are not yet clean, plug-and-play tools for
+  monthly GMST prediction. There is a useful analogy here with the older two-tier seasonal
+  prediction strategy used widely in the 1990s and 2000s, in which SST
+  was predicted first and the atmospheric response was then computed
+  separately with an AGCM, largely because coupled model biases were
+  too large to rely on a fully coupled forecast alone. Our approach is similar in spirit: rather than relying on a full
+  coupled prediction system to get every part of the problem right at
+  once, we isolate the most predictable large-scale components. In particular, we use the slowly varying GMST
+  background state together with the seasonally dependent ENSO
+  influence in a simpler predictive framework.
+
+Extend the analysis from a proof-of-concept predictive model to
+  a fully out-of-sample forecast framework with cross-validation and
+  real-time prediction experiments. Quantify forecast uncertainty more carefully, including
+  out-of-sample prediction intervals and calibration of probabilistic
+  forecasts. Examine whether additional predictors beyond the prior June--May
+  mean GMST and December Niño-3.4 can add useful
+  skill, especially for years with unusual evolution. In particular, it will be useful to test whether volcanic
+  forcing, solar variability, or other modes of internal variability
+  provide incremental predictive information beyond the present
+  two-predictor model. Explore alternative representations of ENSO, including indices
+  that distinguish event amplitude, longitude, or temporal evolution,
+  to determine whether they better capture the seasonally varying
+  GMST response. Extend the framework to initialized ENSO forecasts, so that the
+  December Niño-3.4 predictor is itself predicted operationally rather
+  than prescribed. Compare the statistical framework more directly with initialized
+  seasonal climate model forecasts of GMST, with
+  particular attention to reliability, dispersion, and sensitivity to
+  initialization. Investigate whether the same low-dimensional trajectory approach
+  can be applied to regional or zonal mean temperatures, where the
+  forced signal is weaker and the seasonal ENSO response may be more
+  structured. More broadly, future work should clarify how far monthly global
+  mean temperature predictability can be pushed using transparent,
+  physically interpretable predictors before the added complexity of
+  larger forecast systems becomes necessary.
+
+NOAAGlobalTemp version 6.1 data are from \url{https://www.ncei.noaa.gov/data/noaa-global-surface-temperature/v6/access/gridded/NOAAGlobalTemp_v6.1.0_gridded_s185001_e202602_c20260308T114550.nc}. NOAA Extended Reconstructed SST V5 (ERSSTv5) data are provided
+  by the NOAA PSL, Boulder, Colorado, USA, from their website
+  \url{https://psl.noaa.gov}.
+
+Please include a comprehensive conflict of interest statement that reflect all conflicts of interest for all involved authors. If there are no conflicts of interest please state, “The authors declare there are no conflicts of interest for this manuscript.”
+
+\clearpage
+
+\section*{Open Research Section}
+Data and code availability statement here. Data cannot be listed as
+``available from the authors.''
+
+\section*{Conflict of Interest}
+The authors declare no conflicts of interest.
+
+\acknowledgments
+Enter acknowledgments here.
+
+\bibliography{all}
+
+\section{Supplemental/not shown}
+
+\renewcommand\thefigure{S\arabic{figure}}
+
+\setcounter{figure}{0}
+
+\renewcommand\thetable{S\arabic{table}}
+
+\setcounter{table}{0}
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/variance_explained.pdf}
+  \caption{Variance per mode and cumulative explained
+      variance of PCA applied to (a, c) Nino-3.4 and (b, d) global
+      mean temperature (GMST). The dashed lines in panels a, b indicate
+      the 5\% level and in panels c, d the 90\%
+      level.}
+  \label{fig:EOF-variance-explained}
+\end{figure}
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/fit_full_model.pdf}
+  \caption{Reconstruction fit of the full two-PC
+      model.}
+  \label{fig:fit_full_recon}
+\end{figure}
+
+    
+Predictors: GMST PC1, PC2 at time $t$
+            and Niño-3.4 PC1, PC2 at time $t+1$. In-sample fit: RMSE$=0.11$°C, $R^2=0.86$. Gap to 2-PC ceiling ($R^2=0.95$) reflects
+            year-to-year variability not explained
+            by the chosen predictors. This full model is the benchmark;
+            reductions next.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/fit_reduction2.pdf}
+  \caption{Reconstruction fit of reduction 2.}
+  \label{fig:fit_r2_recon}
+\end{figure}
+
+    
+Replace Niño-3.4 PC1 with the raw \textbf{December}
+            Niño-3.4 value ($r=0.99$ with PC1). December is where EOF1 peaks and EOF2 $\approx 0$
+            --- a single month proxies the full trajectory. RMSE$=0.114$, $R^2=0.85$ --- same skill as
+            Reduction~1, zero loss vs the PC formulation. Enables direct physical statements:
+            ``given December Niño-3.4 $= x$, the
+            June--May GMST trajectory is $\ldots$''.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/variance_explained_dc.pdf}
+  \caption{Variance per mode and cumulative
+      variance for double-centered PCA.}
+  \label{fig:EOF-variance-explained-dc}
+\end{figure}
+
+    
+Remove annual cycle \emph{and} segment mean
+            (Jun--May average) before PCA. Segment mean captures \textbf{90.9\%} of
+            total variance — this is the ``level.''. Remaining PCA modes capture the
+            within-year ``shape'' ($\sim$5\%). Segment mean $\equiv$ GMST-PC1 (correlation
+            $r = 1.00$ since EOF1 is nearly flat).
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/corr_dec_n34_by_month.pdf}
+\end{figure}
+
+Expected: positive correlations peaking
+            near December (ENSO peak season) ---
+            confirmed. Unexpected: Jun--Aug correlations are
+            equally strong but \emph{negative}. The small Jun--Aug regression coefficients
+            (see left panel of previous figure) are
+            not sampling noise --- they represent
+            genuine signal. Hypothesis: ENSO events tend to alternate
+            in sign year to year.  When Dec Niño-3.4
+            is warm (El Niño), the preceding Jun--Aug
+            was more likely cool (residual La Niña
+            from the prior year), producing negative
+            correlation. Implication: the DC residual in early months
+            carries memory of the \emph{prior} ENSO
+            event, not captured by Dec Niño-3.4 alone.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/pc_correlations_dc_pred.pdf}
+  \caption{Cross correlations for idea 2.}
+  \label{fig:idea-2-cross-corr}
+\end{figure}
+
+    
+GMST mean$(t)$ predicts GMST mean$(t+1)$
+            strongly ($r \approx 0.92$) --- persistence
+            dominates the level. Dec Niño-3.4$(t+1)$ predicts DC-PC1$(t+1)$
+            ($r \approx 0.63$) --- ENSO drives the
+            within-year shape. DC-PC1$(t)$ carries little additional
+            information beyond the level. Two predictors, two predictands: a
+            minimal, interpretable system.
+
+\begin{figure}
+  \noindent \includegraphics[width=\textwidth]{/Users/tippett/claude/enso-gmt-prediction/plots/pc_correlations_dc.pdf}
+\end{figure}
+
+GMST mean$(t)$ predicts GMST mean$(t+1)$
+            strongly ($r=0.92$, persistence) and
+            new PC2$(t+1)$ weakly ($r=0.22$). Dec Niño-3.4$(t+1)$ predicts new
+            PC1$(t+1)$ strongly ($r=0.63$) and
+            GMST mean$(t+1)$ weakly ($r=0.17$). new PC2$(t+1)$ correlates with
+            nothing strongly --- likely noise
+            (new EOF2 $\approx$ flat, $R^2=0.12$).
+
+\begin{table}
+  \input{/Users/tippett/claude/enso-gmt-prediction/tex/regression_table_full.tex}
+\caption{Regression table for the four-PC model}\label{tab:full_model}
+\end{table}
+
+\begin{table}
+  
+  \input{/Users/tippett/claude/enso-gmt-prediction/tex/regression_table_r1.tex}
+  \caption{Regression table for the two-PC model}\label{tab:model-r1}
+  \end{table}
+
+\begin{table}
+  
+  \input{/Users/tippett/claude/enso-gmt-prediction/tex/regression_table_r2.tex}
+  \caption{Regression table for N34-PC1 replaced by Dec Nino-3.4 in the two-PC model.}
+\end{table}
+
+\begin{table}
+  
+  \input{/Users/tippett/claude/enso-gmt-prediction/tex/regression_table_dc2.tex}
+  \caption{Regression table for the simplified model.}
+  \label{tab:model-sm}
+\end{table}
+
+\end{document}

@@ -1,0 +1,202 @@
+# Spec: beamer_to_ams.py
+
+## 1. Purpose
+
+Convert a Beamer slide deck (`.tex`) to a draft AMS journal manuscript
+(`\documentclass{ametsocV6.1}`) suitable for sharing with coauthors.
+The script restructures slide content into prose paragraphs and figure
+environments, extracts metadata (title, authors, affiliations, abstract)
+from the Beamer preamble, and emits a compilable `.tex` file.
+
+---
+
+## 2. Inputs
+
+| File | Relevant content | Notes |
+|------|-----------------|-------|
+| `slides.tex` | Full Beamer source | Preamble + `\begin{document}...\end{document}` |
+
+Key preamble commands parsed:
+
+| Command | Extracted field |
+|---------|----------------|
+| `\title[short]{Long title}` | AMS `\title{}` |
+| `\author[short]{Name\inst{N} and Name\inst{N}}` | AMS `\authors{}` with `\aff{}` and `\correspondingauthor{}` |
+| `\institute[]{...}` | AMS `\affiliation{\aff{a}{...}\\...}` |
+
+---
+
+## 3. Outputs
+
+| File | Contents | Format |
+|------|----------|--------|
+| `<stem>_manuscript.tex` | AMS manuscript skeleton | UTF-8 LaTeX |
+
+Output preamble includes: `\title{}`, `\authors{}`, `\affiliation{}`,
+`\abstract{}` (populated from `\section{Abstract}` frame content).
+
+Output postamble includes: `\bibliographystyle{...}`, `\bibliography{...}`,
+`\end{document}` — built from source, not from passthrough events.
+
+---
+
+## 4. Algorithm
+
+### 4.1 Metadata extraction (from full source before `\begin{document}`)
+
+1. **Title**: regex for `\title[opt]{...}`, extract with `_extract_brace_group`.
+2. **Authors / affiliations**: call `_parse_inst_blocks(src)` (shared,
+   `beamer_common.py`) to parse `\author{Name\inst{N} and ...}` and
+   `\institute{\inst{N} text \and \inst{N} text}`.  Map `\inst{N}` numbers
+   to `aff` letters (a, b, …) in order of first appearance.  Build:
+   - `\authors{Name\aff{a}\correspondingauthor{Abbrev.,\n    email} and Name\aff{b}}`
+   - `\affiliation{\n  \aff{a}{text}\\\n  \aff{b}{text}\n}`
+   First author is assumed corresponding; abbreviated name uses initials
+   for all words except the last (`_abbreviate_name`).
+
+### 4.2 Body preprocessing
+
+Operates on the text between `\begin{document}` and `\end{document}`:
+
+1. Strip beamer display commands (`\titlepage`, `\maketitle`, etc.).
+2. Strip beamer theme commands (`\usetheme`, `\setbeamercolor`, etc.).
+3. Strip `\setcounter` and `\renewcommand` **except** `\thefigure`/`\thetable` resets.
+4. Strip comment lines with `(?<!\\)%[^\n]*` (negative lookbehind preserves `\%`).
+
+### 4.3 Event list
+
+Scan the preprocessed body and build a sorted list of `(position, type, content)`:
+
+| Type | Source pattern | Output |
+|------|---------------|--------|
+| `section` | `\section{Title}` or `\section*{Title}` | `\section{Title}` |
+| `frame` | `\begin{frame}...\end{frame}` | transformed prose/figures |
+| `passthrough` | `\renewcommand\thefigure{...}`, `\setcounter{figure}{...}`, `\renewcommand\thetable{...}`, `\setcounter{table}{...}`, `\clearpage` outside frames | verbatim |
+
+`build_event_list(body, keep_bibliographystyle=False)` — `\bibliographystyle`
+and `\bibliography` are **not** captured as passthrough events; they are
+injected explicitly into the postamble (see §4.5).
+
+Passthrough events are filtered to positions **outside** frame ranges to
+avoid duplicating commands that also appear inside frame content.
+
+### 4.4 Abstract extraction
+
+Before emitting the body, scan the event list for `section: Abstract`.
+Consume the section header and all immediately following `frame` events;
+transform their content and join as the `\abstract{}` text.  Remove these
+events from the body event list.
+
+### 4.5 Bibliography extraction and postamble
+
+`_extract_bib_file(src)` and `_extract_bib_style(src)` (both in `beamer_common.py`)
+scan the **full raw source** with `re.search`, so they find `\bibliography{...}` and
+`\bibliographystyle{...}` regardless of whether those commands appear inside or
+outside a Beamer frame.
+
+`_build_postamble(bib_style, bib_file)` emits:
+```latex
+\bibliographystyle{<style>}   % omitted if not found in source
+\bibliography{<file>}
+\end{document}
+```
+
+This replaces the former approach of relying on passthrough events, which silently
+dropped bib commands when they appeared inside a frame.
+
+### 4.6 Frame content transformation (`transform_content`)
+
+Applied to each frame's raw content string in order:
+
+1. **Font size/shape stripping** — `_strip_font_size_cmds`: removes `\tiny`,
+   `\scriptsize`, `\footnotesize`, `\small`, `\large`, `\Large`, `\LARGE`,
+   `\huge`, `\Huge`, `\bfseries`, `\itshape`, etc., and
+   `\fontsize{S}{B}\selectfont`.
+2. **Spacing/transition commands** — strip `\pause`, `\newpage`, `\medskip`,
+   `\vspace{...}`, `\centering`, `\noindent`, `\setlength`, etc.
+3. **Overlay commands** — `\only<>{}`, `\visible<>{}`, etc. → keep content.
+4. **Unwrap** — `\alert{x}` → `x`; `\textcolor{c}{x}` → `x`; `\structure{x}` → `x`.
+5. **Column/minipage tags** — strip `\begin{columns}`, `\column{...}`,
+   `\begin{minipage}{...}`, `\end{minipage}` (keep content).
+6. **Figure restructuring** — `_restructure_figures`:
+   - Convert `\captionof{type}{...}` → `\caption{...}` via balanced-brace matching.
+   - Skip `\includegraphics` already inside `\begin{figure}...\end{figure}`.
+   - Group consecutive `\includegraphics` into one figure.
+   - Look ahead for `\caption{...}` (balanced braces) and `\label{...}`;
+     include both inside the figure environment.
+   - Strip font size commands from caption text.
+7. **List flattening** — `_flatten_lists`: `\begin{enumerate|itemize}...\end{...}`
+   → prose paragraph; each `\item` becomes a sentence ending with `.`.
+8. **Block environments** — `\begin{block}{Title}` → `\textbf{Title}`.
+9. **Center environment** — strip tags, keep content.
+10. **Whitespace cleanup** — collapse 3+ blank lines to 2.
+
+### 4.7 Balanced brace helper
+
+`_extract_brace_group(text, start)` — walks character by character tracking
+depth; returns `(content, end_index)`.  Used throughout for: frame title
+extraction, `\captionof` conversion, caption lookahead, `\frametitle` extraction,
+metadata extraction from preamble.
+
+---
+
+## 5. Constants & Scientific Rationale
+
+| Name | Value | Why |
+|------|-------|-----|
+| Aff letter series | `'abcdefghijklmnopqrstuvwxyz'` | AMS convention for `\aff{}` labels |
+| Caption lookahead | ~balanced | Use `_extract_brace_group` rather than fixed char window to handle arbitrary caption length |
+| Frame title length limit | 300 chars, no `\n\n` | Distinguishes `{Title}` arg from frame body starting with `{` |
+
+---
+
+## 6. Edge Cases & Error Handling
+
+| Situation | Handling |
+|-----------|----------|
+| `\captionof` with nested braces (`\ref{}`, `\textbf{}`, `\fontsize{}{}`) | Handled by `_convert_captionof` using `_extract_brace_group` |
+| `\%` in source text | Comment regex uses `(?<!\\)%` so `\%` is preserved |
+| Frame title containing `\ref{fig:xxx}` | Balanced brace extraction handles nested `{}` in titles |
+| `[allowframebreaks]` option prefix | `extract_frames` strips the full `[opt]{title}` prefix using `raw = raw[leading_ws + end:]` |
+| Multiple `\includegraphics` side-by-side | Consecutive images (whitespace-separated) collected into one `\begin{figure}` |
+| `\includegraphics` already in `\begin{figure}` | `_restructure_figures` detects existing figure env and passes it through unchanged |
+| `\bibliographystyle`/`\bibliography` inside a frame | Stripped by `transform_content`; postamble uses values extracted from raw source, so inside-frame location is harmless |
+| `\bibliographystyle`/`\bibliography` outside a frame | Same: extracted from raw source, not from passthrough events |
+| No `\bibliography{}` in source | `_extract_bib_file` returns `'references'`; `_extract_bib_style` returns `None` (style line omitted) |
+| No `\institute{}` in source | Falls back to per-author `Department, Institution, City, State` placeholder |
+| `\author` without `\inst{}` markers | Authors assigned aff letters sequentially; single `\affiliation` placeholder |
+| `\section{Abstract}` | Consumed into `\abstract{}` preamble block; removed from body |
+| `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
+
+---
+
+## 7. Synchronization Log
+
+| Date | Change | Spec updated |
+|------|--------|-------------|
+| 2026-04-10 | Initial implementation: frame parser, list flattening, figure restructuring, AMS preamble skeleton | Yes |
+| 2026-04-10 | Fixed `\%` stripping (negative lookbehind in comment regex) | Yes |
+| 2026-04-10 | Removed `\usepackage{ametsoc}` and `\journal{}` from preamble (conflict/undefined in standalone cls) | Yes |
+| 2026-04-10 | Added `_strip_font_size_cmds`; strips `\tiny`, `\scriptsize`, `\fontsize{}{}\selectfont` etc. | Yes |
+| 2026-04-10 | Replaced `\captionof` regex with balanced-brace conversion (`_convert_captionof`) | Yes |
+| 2026-04-10 | Replaced frame title extraction with balanced-brace matching | Yes |
+| 2026-04-10 | Fixed double-wrapping: `_restructure_figures` skips existing `\begin{figure}` environments | Yes |
+| 2026-04-10 | Group consecutive `\includegraphics` into single figure; capture `\label` after `\caption` | Yes |
+| 2026-04-10 | Fixed `[allowframebreaks]` leaking: strip full `[opt]{title}` prefix in `extract_frames` | Yes |
+| 2026-04-10 | Switched to section+frame event model; beamer `\section{}` → manuscript `\section{}`; frame titles dropped | Yes |
+| 2026-04-10 | Extracted `\title`, `\author`, `\institute` from beamer preamble for AMS metadata | Yes |
+| 2026-04-10 | `\section{Abstract}` frame content → `\abstract{}`; section removed from body | Yes |
+| 2026-04-10 | `\authors{}` format: inline `\aff{}`, `\correspondingauthor{}`, `\affiliation{\aff{a}{...}\\...}` | Yes |
+| 2026-04-10 | `\renewcommand\thefigure` and `\setcounter{figure}` preserved as passthrough events | Yes |
+| 2026-04-16 | Shared: `\fig{path}` expanded to `\includegraphics{path}` in `preprocess_body` (beamer_common) | Yes |
+| 2026-04-16 | Shared: `\bibliographystyle`/`\bibliography` stripped from frame content in `transform_content` | Yes |
+| 2026-04-16 | Shared: `\thetable`/`\setcounter{table}` added to passthrough and preprocess preserve patterns | Yes |
+| 2026-04-16 | Shared: `\clearpage` added to passthrough pattern | Yes |
+| 2026-04-16 | Shared: `\label{}` immediately after `\section{}` now passed through | Yes |
+| 2026-04-16 | Shared: `\section*{...}` now captured as section events (fixes over-consumption in `extract_abstract`) | Yes |
+| 2026-04-26 | Shared: `extract_passthrough_packages` now passes through `\usepackage{bm}` in addition to `amsmath`/`amssymb` | Yes |
+| 2026-05-07 | Shared: `_parse_inst_blocks` extracted to `beamer_common.py`; `_parse_authors_affiliations` now calls it | Yes |
+| 2026-05-07 | Shared: `_extract_bib_file` and `_extract_bib_style` added to `beamer_common.py` | Yes |
+| 2026-05-07 | Script renamed `beamer_to_manuscript.py` → `beamer_to_ams.py`; unified CLI `convert.py` added | Yes |
+| 2026-05-07 | Shared: compiled module-level regex patterns for `_strip_font_size_cmds` and `preprocess_body`; `inc_re` extended to capture filename (group 2); double `frame_pat` scan in `build_event_list` eliminated; O(n²) `re.findall` in `_wrap_equations_linenomath` replaced with running depth counter | Yes |
+| 2026-05-12 | Bibliography injection made robust to inside-frame location: `_extract_bib_file`/`_extract_bib_style` scan raw source; `_build_postamble` injects explicitly; `keep_bibliographystyle=False` (was `True`) | Yes |

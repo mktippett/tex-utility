@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.bbl
+*.blg
+*.synctex.gz
+*.synctex(busy)
+*.out
+*.fls
+*.fdb_latexmk
+
+# PDFs
+*.pdf
+
+# Full publisher package subdirectories (essentials extracted to ams/ and agu/)
+agu/Sep-2025-agujournal2019 template/
+ams/AMS LaTeX Package V6.1/
+
+# Root-level duplicate class file
+/agujournal2019.cls

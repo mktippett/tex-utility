@@ -1,0 +1,235 @@
+\documentclass{beamer}
+\usetheme{default}
+
+% -----------------------------------------------------------------------
+% AGU-specific directives (comment sentinels; invisible to Beamer)
+% -----------------------------------------------------------------------
+%% AGU_EMAIL: author@university.edu
+%\journalname{Geophysical Research Letters}
+
+\usepackage{natbib}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{bm}
+
+\title[Short Title]{Full Test Title for Conversion Scripts}
+\author[]{Author One\inst{1} and Author Two\inst{2} and Author Three\inst{1}}
+\institute[]{%
+  \inst{1} Department of Atmospheric Science, Test University, Boulder, CO, USA
+  \and
+  \inst{2} Institute of Oceanography, Second University, Seattle, WA, USA
+}
+
+\begin{document}
+
+% -----------------------------------------------------------------------
+% Abstract
+% -----------------------------------------------------------------------
+\section{Abstract}
+\begin{frame}{Abstract}
+This study tests all features of the Beamer-to-manuscript conversion
+pipeline. We verify metadata extraction, citation remapping, equation
+wrapping, figure and table formatting, list flattening, and supplemental
+information handling.
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Key Points  (AGU: consumed into \begin{keypoints}; AMS: passthrough section)
+% -----------------------------------------------------------------------
+\section*{Key points}
+\begin{frame}{Key Points}
+\begin{itemize}
+  \item Conversion pipeline correctly extracts metadata from Beamer preamble
+  \item All natbib citation commands are remapped to apacite for AGU output
+  \item Supplemental figures and tables are counted and listed automatically
+\end{itemize}
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Plain Language Summary  (AGU only: consumed into preamble PLS slot)
+% -----------------------------------------------------------------------
+\section*{Plain Language Summary}
+\begin{frame}{Plain Language Summary}
+Scientific papers often begin as slide presentations. This tool automates
+the conversion of slides to journal manuscript format, reducing manual
+reformatting effort.
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Introduction
+% -----------------------------------------------------------------------
+\section{Introduction}
+
+\begin{frame}{Background}
+% Citation variants: citet, citep, citealp, citeauthor, citeyear
+The Madden--Julian Oscillation \citep{madden1971} is a tropical weather
+pattern with a 30--90 day period. \citet{wheeler2004} developed the RMM
+index. See also \citealp{zhang2005} and \citeauthor{lau2012}
+(\citeyear{lau2012}).
+\end{frame}
+
+\begin{frame}{Motivation}
+\begin{itemize}
+  % One-arg citep with postnote:
+  \item Forecast skill degrades rapidly \citep[e.g.,]{vitart2017}
+  % Two-arg citet (pre + post):
+  \item Neural models show promise \citet[see][their Fig.~3]{smith2020}
+  % Two-arg citet with empty prenote:
+  \item Further evidence \citet[][p.~5]{jones2019}
+  % Two-arg citep (pre + post):
+  \item See also \citep[cf.][Table~2]{brown2021}
+  % Beamer formatting that should be stripped:
+  \item \alert{Highlighted text} and \textcolor{red}{colored text} are removed
+  \item \only<2>{Overlay-only content is kept but tag is stripped}
+  \item \structure{Structural markup} is unwrapped
+\end{itemize}
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Methods
+% -----------------------------------------------------------------------
+\section{Methods}
+
+\begin{frame}{Equations}
+Anomalies are computed as
+\begin{equation}
+  u'(\lambda, t) = u(\lambda, t) - \bar{u}(\lambda, t),
+  \label{eq:anomaly}
+\end{equation}
+where $\bar{u}$ is the climatological mean.\pause
+
+Display math with bracket notation:
+\[
+  \mathrm{PC1}(t) = \int_{-15}^{15} \bm{e}_1 \cdot \bm{u}'\,d\lambda
+\]
+
+Aligned system:
+\begin{align}
+  x &= r\cos\theta \label{eq:x}\\
+  y &= r\sin\theta \label{eq:y}
+\end{align}
+\end{frame}
+
+\begin{frame}{Beamer Formatting}
+% block → bold title
+\begin{block}{Block Title}
+Block environments are converted to a bold title.
+\end{block}
+\vspace{1em}
+% center → unwrap
+\begin{center}
+Centered content is unwrapped.
+\end{center}
+\medskip
+% columns → strip tags, keep content
+\begin{columns}
+\column{0.5\textwidth}
+Left column content.
+\column{0.5\textwidth}
+Right column content.
+\end{columns}
+% font size commands should be stripped
+\small Small text here. \normalsize Normal again.
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Results
+% -----------------------------------------------------------------------
+\section{Results}
+
+\begin{frame}{Main Figure}
+% \fig{} macro → \includegraphics via preprocess_body
+\fig{test_figure_1.pdf}
+\captionof{figure}{Spatial pattern of EOF-1 for U850 (red) and U200 (green).}
+\end{frame}
+
+\begin{frame}{Two Figures Side by Side}
+% Consecutive \includegraphics → grouped into one figure environment
+\includegraphics[width=0.48\textwidth]{test_figure_2a.pdf}
+\includegraphics[width=0.48\textwidth]{test_figure_2b.pdf}
+\caption{Left: PC1 power spectrum. Right: PC2 power spectrum.}
+\label{fig:spectra}
+\end{frame}
+
+\begin{frame}{Summary Table}
+\begin{tabular}{lcc}
+\hline
+Metric         & Forecast & Observed \\
+\hline
+Mean amplitude & 1.42     & 1.38     \\
+Std deviation  & 0.87     & 0.91     \\
+\hline
+\end{tabular}
+\end{frame}
+
+% -----------------------------------------------------------------------
+% Conclusions
+% -----------------------------------------------------------------------
+\section{Conclusions}
+
+\begin{frame}{Summary}
+\begin{itemize}
+  \item All conversion features operate as expected \citep{madden1971}
+  \item The pipeline handles \alert{edge cases} cleanly
+  \item Ready for production use
+\end{itemize}
+\end{frame}
+
+\clearpage
+
+% -----------------------------------------------------------------------
+% AGU endmatter sentinels
+% (compiled as normal Beamer frames in slides; extracted for manuscript)
+% -----------------------------------------------------------------------
+%% AGU_OPENRESEARCH_BEGIN
+\begin{frame}{Open Research}
+\begin{itemize}
+  \item Forecast data archived at \url{https://zenodo.org/record/test}
+  \item Analysis code at \url{https://github.com/test/mjo-analysis}
+\end{itemize}
+\end{frame}
+%% AGU_OPENRESEARCH_END
+
+%% AGU_COI_BEGIN
+\begin{frame}{Conflict of Interest}
+The authors declare no conflicts of interest relevant to this study.
+\end{frame}
+%% AGU_COI_END
+
+%% AGU_ACKS_BEGIN
+\begin{frame}{Acknowledgments}
+Supported by NSF grant AGS-0000000. The authors thank the NeuralGCM
+development team.
+\end{frame}
+%% AGU_ACKS_END
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+% -----------------------------------------------------------------------
+% Supplemental  (AGU: moved after \bibliography; SI checklist counts from here)
+% Expected counts: 2 figures, 1 table  → "Figures S1 to S2", "Table S1"
+% -----------------------------------------------------------------------
+\section{Supplemental}
+
+\begin{frame}{SI: Extended EOF Patterns}
+\fig{test_si_figure_1.pdf}
+\end{frame}
+
+\begin{frame}{SI: Sensitivity Analysis}
+\fig{test_si_figure_2.pdf}
+\end{frame}
+
+\begin{frame}{SI: Full Statistics}
+\begin{tabular}{lccc}
+\hline
+Region    & N    & Mean & Std  \\
+\hline
+Tropics   & 1388 & 1.42 & 0.87 \\
+IndOcean  & 1388 & 1.18 & 0.73 \\
+WestPac   & 1388 & 1.31 & 0.81 \\
+\hline
+\end{tabular}
+\end{frame}
+
+\end{document}

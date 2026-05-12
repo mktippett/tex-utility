@@ -14,6 +14,7 @@ and for splitting compiled PDFs into main text and SI files.
 | `scripts/beamer_to_agu.py` | AGU converter (can also be run directly) |
 | `scripts/beamer_common.py` | Shared Beamer parsing (imported by both converters) |
 | `scripts/split_pdf.py` | Split a compiled PDF into main text and SI at a given page |
+| `scripts/make_single_figure.sh` | Extract each manuscript figure into its own `figN.pdf` file |
 
 ### Class files
 
@@ -82,6 +83,20 @@ python scripts/split_pdf.py paper.pdf 18 main.pdf si.pdf
 ```
 
 Requires `pypdf` (`pip install pypdf`).
+
+### Extracting individual figure files
+
+Some journals require one PDF file per figure. This script extracts every
+`\begin{figure}...\end{figure}` block from a manuscript, compiles them into
+a single PDF, then splits and crops each page into its own file:
+
+```bash
+bash scripts/make_single_figure.sh manuscript.tex
+# → fig1.pdf, fig2.pdf, … (one per figure, cropped to content)
+```
+
+The figure count is detected automatically. Requires `pdflatex` and `pdfcrop`.
+The manuscript must use the `ametsoc` document class.
 
 ---
 
@@ -348,6 +363,7 @@ tex-utility/
     beamer_to_agu.py        AGU converter
     beamer_common.py        Shared Beamer parsing
     split_pdf.py            PDF splitter (main text / SI)
+    make_single_figure.sh   Extract each figure into its own figN.pdf
   specs/
     beamer_to_ams_spec.md   AMS converter behavioral spec
     beamer_to_agu_spec.md   AGU converter behavioral spec

@@ -35,8 +35,9 @@ Key preamble commands parsed:
 Output preamble includes: `\title{}`, `\authors{}`, `\affiliation{}`,
 `\abstract{}` (populated from `\section{Abstract}` frame content).
 
-Output postamble includes: `\bibliographystyle{...}`, `\bibliography{...}`,
-`\end{document}` — built from source, not from passthrough events.
+Output postamble:
+- **No supplemental section**: `\bibliographystyle{...}` + `\bibliography{...}` + `\end{document}` — built from raw source, not from passthrough events.
+- **Supplemental section present**: bib commands are injected into the event list before the supplemental content (see §4.5); postamble is `\end{document}` only.
 
 ---
 
@@ -87,22 +88,37 @@ Consume the section header and all immediately following `frame` events;
 transform their content and join as the `\abstract{}` text.  Remove these
 events from the body event list.
 
-### 4.5 Bibliography extraction and postamble
+### 4.5 Bibliography extraction and supplemental reordering
 
 `_extract_bib_file(src)` and `_extract_bib_style(src)` (both in `beamer_common.py`)
 scan the **full raw source** with `re.search`, so they find `\bibliography{...}` and
 `\bibliographystyle{...}` regardless of whether those commands appear inside or
 outside a Beamer frame.
 
-`_build_postamble(bib_style, bib_file)` emits:
-```latex
-\bibliographystyle{<style>}   % omitted if not found in source
-\bibliography{<file>}
-\end{document}
-```
+After extracting the abstract, the event list is scanned for a section whose title
+contains `supplement` (case-insensitive):
 
-This replaces the former approach of relying on passthrough events, which silently
-dropped bib commands when they appeared inside a frame.
+- **No supplemental section**: `_build_postamble(bib_style, bib_file)` emits:
+  ```latex
+  \bibliographystyle{<style>}   % omitted if not found in source
+  \bibliography{<file>}
+  \end{document}
+  ```
+- **Supplemental section found**:
+  1. Any `\bibliography{...}` passthrough events already parsed from the body are
+     removed (prevents duplication).
+  2. A new passthrough event is inserted immediately before the supplemental section:
+     ```latex
+     \bibliographystyle{<style>}   % if present
+     \bibliography{<file>}
+     \clearpage
+     ```
+  3. The `\section{Supplemental…}` event is stripped (its following frame events
+     remain, so the SI content appears after `\clearpage`).
+  4. Postamble is reduced to `\end{document}`.
+
+This ensures references always precede supplemental content in the output, mirroring
+the explicit reorder logic in `beamer_to_agu.py`.
 
 ### 4.6 Frame content transformation (`transform_content`)
 
@@ -162,6 +178,7 @@ metadata extraction from preamble.
 | `\includegraphics` already in `\begin{figure}` | `_restructure_figures` detects existing figure env and passes it through unchanged |
 | `\bibliographystyle`/`\bibliography` inside a frame | Stripped by `transform_content`; postamble uses values extracted from raw source, so inside-frame location is harmless |
 | `\bibliographystyle`/`\bibliography` outside a frame | Same: extracted from raw source, not from passthrough events |
+| `\section{Supplemental}` (or `Supplementary…`) present | Bibliography injected before it as a passthrough event; supplemental section marker stripped; `\clearpage` separates references from SI content; postamble = `\end{document}` only |
 | No `\bibliography{}` in source | `_extract_bib_file` returns `'references'`; `_extract_bib_style` returns `None` (style line omitted) |
 | No `\institute{}` in source | Falls back to per-author `Department, Institution, City, State` placeholder |
 | `\author` without `\inst{}` markers | Authors assigned aff letters sequentially; single `\affiliation` placeholder |
@@ -200,3 +217,4 @@ metadata extraction from preamble.
 | 2026-05-07 | Script renamed `beamer_to_manuscript.py` → `beamer_to_ams.py`; unified CLI `convert.py` added | Yes |
 | 2026-05-07 | Shared: compiled module-level regex patterns for `_strip_font_size_cmds` and `preprocess_body`; `inc_re` extended to capture filename (group 2); double `frame_pat` scan in `build_event_list` eliminated; O(n²) `re.findall` in `_wrap_equations_linenomath` replaced with running depth counter | Yes |
 | 2026-05-12 | Bibliography injection made robust to inside-frame location: `_extract_bib_file`/`_extract_bib_style` scan raw source; `_build_postamble` injects explicitly; `keep_bibliographystyle=False` (was `True`) | Yes |
+| 2026-05-15 | Supplemental reorder: when `\section{Supplement*}` detected, bib commands + `\clearpage` injected before it; section marker stripped; postamble reduced to `\end{document}`. Mirrors AGU reorder logic. | Yes |

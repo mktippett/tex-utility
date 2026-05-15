@@ -124,6 +124,8 @@ The manuscript must use the `ametsoc` document class.
 - `natbib` / `\citep` / `\citet` — kept as-is
 - `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and
   injected into the postamble (works regardless of whether they appear inside or outside a frame)
+- `\section{Supplemental…}` is reordered: bibliography + `\clearpage` are injected
+  before it so references always precede SI content (mirrors AGU behavior)
 
 **AGU-specific:**
 - Author affiliations use `\affil{1}`, `\affil{2}`, … (number-based)

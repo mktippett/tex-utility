@@ -132,6 +132,38 @@ def convert(input_path, output_path):
     events = build_event_list(body, keep_bibliographystyle=False)
     abstract_text, events = extract_abstract(events)
 
+    bib_style = _extract_bib_style(src)
+    bib_file = _extract_bib_file(src)
+
+    # Move bibliography before any supplemental section, mirroring AGU logic.
+    supp_idx = next(
+        (i for i, (_, etype, content) in enumerate(events)
+         if etype == 'section' and 'supplement' in content.lower()),
+        None
+    )
+    if supp_idx is not None:
+        # Drop any \bibliography{} passthrough events already parsed from the body
+        # to avoid duplication when we inject it explicitly below.
+        events = [e for e in events
+                  if not (e[1] == 'passthrough' and
+                          re.search(r'\\bibliography\{', e[2]))]
+        supp_idx = next(
+            (i for i, (_, etype, content) in enumerate(events)
+             if etype == 'section' and 'supplement' in content.lower()),
+            None
+        )
+        bib_lines = []
+        if bib_style:
+            bib_lines.append(r'\bibliographystyle{' + bib_style + '}')
+        bib_lines.append(r'\bibliography{' + bib_file + '}')
+        bib_lines.append(r'\clearpage')
+        events.insert(supp_idx, (0, 'passthrough', '\n'.join(bib_lines)))
+        events = [e for e in events
+                  if not (e[1] == 'section' and 'supplement' in e[2].lower())]
+        postamble = r'\end{document}' + '\n'
+    else:
+        postamble = _build_postamble(bib_style, bib_file)
+
     if not events:
         print("Warning: no frames or sections found; writing body as-is.",
               file=sys.stderr)
@@ -142,7 +174,6 @@ def convert(input_path, output_path):
     pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,
                                pkg_ams=pkg_ams)
-    postamble = _build_postamble(_extract_bib_style(src), _extract_bib_file(src))
     out = preamble + '\n' + manuscript_body + '\n' + postamble
     Path(output_path).write_text(out, encoding='utf-8')
     print(f"Written: {output_path}")

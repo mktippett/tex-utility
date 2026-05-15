@@ -143,6 +143,13 @@ def check_manuscript(text):
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
     check('bibliography',              text, r'\\bibliography\{refs\}')
+    # bibliography must precede supplemental content (not end up after it)
+    bib_pos  = text.find(r'\bibliography{refs}')
+    si_pos   = text.find('test_si_figure_1')
+    if bib_pos == -1 or si_pos == -1:
+        _failures.append('  FAIL  bib-before-SI: markers not found for ordering check')
+    elif not (bib_pos < si_pos):
+        _failures.append('  FAIL  bib-before-SI: \\bibliography{} appears AFTER supplemental content')
 
     # --- no AGU-specific transforms ---
     check('no \\citeA',                text, r'\\citeA\{',         present=False)

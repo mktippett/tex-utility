@@ -248,6 +248,7 @@ def _build_si_header(title, authors_block, affiliation_lines, n_si_figs=0, n_si_
     contents_boilerplate = _make_si_checklist(n_si_figs, n_si_tables)
 
     return '\n'.join([
+        r'%% SI_BEGIN',
         r'\clearpage',
         r'\setcounter{page}{1}',
         '',

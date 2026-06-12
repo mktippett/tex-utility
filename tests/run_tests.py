@@ -10,6 +10,7 @@ Usage:
     python run_tests.py                # from tests/
 """
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -19,6 +20,8 @@ from pathlib import Path
 TESTS_DIR   = Path(__file__).parent
 SCRIPTS_DIR = TESTS_DIR.parent / 'scripts'
 INPUT       = TESTS_DIR / 'test_input.tex'
+EXTRACT_INPUT = TESTS_DIR / 'test_main_si.tex'
+EXTRACT_AUX   = TESTS_DIR / 'test_main_si.aux'
 PYTHON      = sys.executable
 
 
@@ -44,6 +47,19 @@ def run_converter(script, output_tex):
     )
     if result.returncode != 0:
         _failures.append(f'  FAIL  {script} exited {result.returncode}:\n{result.stderr}')
+        return False
+    return True
+
+
+def run_extract_main(outdir):
+    result = subprocess.run(
+        [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'),
+         str(EXTRACT_INPUT), str(EXTRACT_AUX),
+         '--outdir', str(outdir), '--no-figures'],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        _failures.append(f'  FAIL  extract_main.py exited {result.returncode}:\n{result.stderr}')
         return False
     return True
 
@@ -159,6 +175,93 @@ def check_manuscript(text):
 
 
 # ---------------------------------------------------------------------------
+# extract_main.py checks
+# ---------------------------------------------------------------------------
+
+def check_extract_main(text):
+    # --- SI removed ---
+    check('SI section removed',       text, r'Supporting Information', present=False)
+    check('SI figure removed',        text, r'si_plotA', present=False)
+    check('SI equation removed',      text, r'\\begin\{equation\}', present=False)
+    check('SI table removed',         text, r'\\begin\{table\}', present=False)
+    check('SI sentinel consumed',     text, r'%%\s*SI_BEGIN', present=False)
+
+    # --- exactly one trailing \end{document} ---
+    n_end = len(re.findall(r'\\end\{document\}', text))
+    if n_end != 1:
+        _failures.append(f'  FAIL  single \\end{{document}}: expected 1, got {n_end}')
+
+    # --- bibliography retained ---
+    check('bibliography retained',    text, r'\\bibliography\{refs\}')
+
+    # --- main-text figures retained ---
+    check('main figure 1 retained',   text, r'plotA\.pdf')
+    check('main figure 2 retained',   text, r'plotB1\.pdf')
+
+    # --- \ref{} to SI label flattened to literal S1 ---
+    check('ref to SI figure -> S1',   text, r'Figure~S1')
+    check('ref to SI table -> S1',    text, r'Table~S1')
+    check('eqref to SI eq -> (S1)',   text, r'Eq\.~\(S1\)')
+    check('pageref to SI fig -> 2',   text, r'page~2')
+
+    # --- \ref{} to a main-text label left unchanged ---
+    check('ref to main figure unchanged', text, r'\\ref\{fig:main1\}')
+
+    # --- \Cref/stale \ref left unchanged (warn-and-skip / stale .aux) ---
+    check('Cref to SI label unchanged',   text, r'\\Cref\{fig:si1\}')
+    check('stale ref unchanged',          text, r'\\ref\{fig:stale\}')
+
+
+# ---------------------------------------------------------------------------
+# extract_main.py figure-rewrite unit test (no pdflatex/pdfcrop required)
+# ---------------------------------------------------------------------------
+
+_FIGURE_REWRITE_SAMPLE = r"""
+\begin{figure}
+  \includegraphics[width=\linewidth]{plotA.pdf}
+  \caption{A}
+  \label{fig:a}
+\end{figure}
+
+\begin{figure}
+  \includegraphics[width=0.49\linewidth]{plotB1.pdf}
+  \includegraphics[width=0.49\linewidth]{plotB2.pdf}
+  \caption{B}
+  \label{fig:b}
+\end{figure}
+
+% \begin{figure}
+% \includegraphics{template_example.pdf}
+% \caption{C}
+% \end{figure}
+"""
+
+
+def check_figure_rewrite_unit():
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import extract_main as em
+
+    n = em.count_figure_envs(_FIGURE_REWRITE_SAMPLE)
+    if n != 2:
+        _failures.append(f'  FAIL  count_figure_envs: expected 2 (commented block '
+                          f'excluded), got {n}')
+
+    new_text, n_rewritten = em.rewrite_figure_includes(_FIGURE_REWRITE_SAMPLE)
+    if n_rewritten != 2:
+        _failures.append(f'  FAIL  rewrite_figure_includes: expected 2 rewritten, '
+                          f'got {n_rewritten}')
+
+    check('rewrite fig1 (bare filename)',
+          new_text, r'\\includegraphics\[width=\\linewidth\]\{fig1\.pdf\}')
+    check('rewrite fig2 (first panel -> figN.pdf)',
+          new_text, r'\\includegraphics\[width=0\.49\\linewidth\]\{fig2\.pdf\}')
+    check('rewrite fig2 (second panel removed)',
+          new_text, r'plotB2\.pdf', present=False)
+    check('commented figure block preserved verbatim',
+          new_text, r'% \\includegraphics\{template_example\.pdf\}')
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -193,6 +296,48 @@ def main():
             total_fail += len(new_failures)
         else:
             print('  all checks passed')
+
+    # --- extract_main.py: SI strip + ref flattening, never-overwrite ---
+    print('\n=== extract_main (extract_main.py) ===')
+    if not EXTRACT_INPUT.exists() or not EXTRACT_AUX.exists():
+        print(f'  FAIL  fixture not found: {EXTRACT_INPUT} / {EXTRACT_AUX}')
+        total_fail += 1
+    else:
+        input_hash_before = hashlib.sha256(EXTRACT_INPUT.read_bytes()).hexdigest()
+        before = len(_failures)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if run_extract_main(tmpdir):
+                out_tex = Path(tmpdir) / 'main.tex'
+                if out_tex.exists():
+                    check_extract_main(out_tex.read_text())
+                else:
+                    _failures.append('  FAIL  extract_main.py: main.tex not written')
+
+        input_hash_after = hashlib.sha256(EXTRACT_INPUT.read_bytes()).hexdigest()
+        if input_hash_before != input_hash_after:
+            _failures.append(
+                '  FAIL  extract_main.py: input file was modified '
+                '(never-overwrite invariant violated)')
+
+        new_failures = _failures[before:]
+        if new_failures:
+            for msg in new_failures:
+                print(msg)
+            total_fail += len(new_failures)
+        else:
+            print('  all checks passed')
+
+    # --- extract_main.py: \includegraphics rewrite (unit test) ---
+    print('\n=== extract_main figure rewrite (unit) ===')
+    before = len(_failures)
+    check_figure_rewrite_unit()
+    new_failures = _failures[before:]
+    if new_failures:
+        for msg in new_failures:
+            print(msg)
+        total_fail += len(new_failures)
+    else:
+        print('  all checks passed')
 
     print(f'\n{"All tests passed." if total_fail == 0 else f"{total_fail} failure(s) total."}')
     sys.exit(0 if total_fail == 0 else 1)

@@ -157,6 +157,7 @@ def convert(input_path, output_path):
             bib_lines.append(r'\bibliographystyle{' + bib_style + '}')
         bib_lines.append(r'\bibliography{' + bib_file + '}')
         bib_lines.append(r'\clearpage')
+        bib_lines.append(r'%% SI_BEGIN')
         events.insert(supp_idx, (0, 'passthrough', '\n'.join(bib_lines)))
         events = [e for e in events
                   if not (e[1] == 'section' and 'supplement' in e[2].lower())]

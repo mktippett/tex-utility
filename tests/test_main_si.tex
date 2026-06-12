@@ -1,0 +1,58 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Introduction}
+
+See Figure~\ref{fig:main1}, Figure~\ref{fig:si1}, Table~\ref{tab:si1},
+Eq.~\eqref{eq:si1}, and page~\pageref{fig:si1}. Also
+\Cref{fig:si1} and a stale reference \ref{fig:stale}.
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{plotA.pdf}
+  \caption{Main figure.}
+  \label{fig:main1}
+\end{figure}
+
+\begin{figure}
+  \includegraphics[width=0.49\linewidth]{plotB1.pdf}
+  \includegraphics[width=0.49\linewidth]{plotB2.pdf}
+  \caption{Multi-panel main figure.}
+  \label{fig:main2}
+\end{figure}
+
+% \begin{figure}
+% \includegraphics{template_example.pdf}
+% \caption{Leftover template example -- should be skipped.}
+% \end{figure}
+
+\bibliography{refs}
+
+%% SI_BEGIN
+\clearpage
+\setcounter{page}{1}
+\renewcommand\thefigure{S\arabic{figure}}
+\setcounter{figure}{0}
+\setcounter{equation}{0}
+\renewcommand\theequation{S\arabic{equation}}
+
+\section*{Supporting Information}
+
+\begin{figure}
+  \includegraphics[width=\linewidth]{si_plotA.pdf}
+  \caption{SI figure.}
+  \label{fig:si1}
+\end{figure}
+
+\begin{equation}
+  x = y
+  \label{eq:si1}
+\end{equation}
+
+\begin{table}
+  \caption{SI table.}
+  \label{tab:si1}
+\end{table}
+
+\end{document}

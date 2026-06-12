@@ -41,7 +41,10 @@ Output preamble includes: `\journalname{}`, AGU publication-unit comment block,
 
 Output postamble includes: `\section*{Open Research Section}`,
 `\section*{Conflict of Interest}`, `\acknowledgments`, `\bibliography{}`,
-SI header, `\end{document}`.
+SI header, `\end{document}`. The SI header begins with a `%% SI_BEGIN`
+comment sentinel marking the SI boundary, consumed by
+`extract_main.py` (`specs/extract_main_spec.md`) when splitting out a
+main-text-only manuscript.
 
 `%TC:ignore` / `%TC:endignore` markers are inserted for `texcount` compatibility:
 - Title block (title → key points): ignored
@@ -295,3 +298,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-05-07 | Script `beamer_to_manuscript.py` renamed to `beamer_to_ams.py`; unified CLI `convert.py --format ams|agu` added | Yes |
 | 2026-05-07 | Shared: compiled module-level regex patterns (`_FONTSIZE_SELECTFONT_RE`, `_FONT_STYLE_RE`, `_BEAMER_BODY_CMDS_RE`, `_BEAMER_SETUP_RE`) eliminate per-call compiles in `_strip_font_size_cmds` and `preprocess_body`; `inc_re` extended with filename capture group (group 2); double `frame_pat` scan in `build_event_list` collapsed to single pass; O(n²) `re.findall` in `_wrap_equations_linenomath` replaced with running `depth` counter; `em_idx` search replaced with `len(events)-1` | Yes |
 | 2026-05-07 | Shared: `_KP_DEFAULTS` defined once at module level; removes duplicate literal list from `_extract_key_points` and `_build_agu_preamble` | Yes |
+| 2026-06-12 | `_build_si_header`: prepend `%% SI_BEGIN` sentinel as the first line of the returned block (before `\clearpage`), marking the SI boundary for `extract_main.py` | Yes |

@@ -5,6 +5,52 @@ and for splitting compiled PDFs into main text and SI files.
 
 ---
 
+## Workflow
+
+```
+slides.tex   (Beamer deck)
+    |
+    |  convert.py --format ams|agu
+    v
+main-and-si.tex   (main text + SI in one file; %% SI_BEGIN marks the boundary)
+    |
+    |  pdflatex (x2-3) + bibtex
+    v
+main-and-si.pdf + main-and-si.aux
+    |
+    +--> split_pdf.py SPLIT_PAGE  -->  paper-SI.pdf
+    |
+    +--> extract_main.py          -->  main.tex, fig1.pdf, fig2.pdf, ...
+              |                         (SI \ref{} hardcoded to S1, S2, ...;
+              |  pdflatex (x2-3)         \includegraphics{figN.pdf}, bare
+              v                          filename, same directory)
+         main.pdf
+```
+
+1. **Convert** (`convert.py` / `beamer_to_ams.py` / `beamer_to_agu.py`) —
+   Beamer slides → `main-and-si.tex`, a single manuscript with main text and
+   SI together so cross-references resolve naturally. See *Beamer →
+   manuscript* below.
+2. **Compile** `main-and-si.tex` (`pdflatex`/`bibtex`) to produce
+   `main-and-si.pdf` and `main-and-si.aux` — both feed the next two steps.
+   See *Compiling the output*.
+3. **Split the SI PDF** (`split_pdf.py`) — cut the compiled
+   `main-and-si.pdf` at the page where the SI begins, producing `paper-SI.pdf`
+   for separate upload. See *Splitting a PDF*.
+4. **Extract the main-text file** (`extract_main.py`) — cut
+   `main-and-si.tex` at `%% SI_BEGIN`, hardcode SI cross-references
+   (`\ref{}` → `S1`, …) using `main-and-si.aux`, and extract each figure to
+   its own `figN.pdf` (`make_single_figure.sh`) with bare-filename
+   `\includegraphics{figN.pdf}` so the result compiles in a flat submission
+   folder. See *Extracting the main-text-only file*.
+
+Steps 3 and 4 both consume the **compiled** `main-and-si.pdf`/`.aux` from
+step 2 and can run in either order. Together they produce the
+submission/revision package: `main.tex` + `figN.pdf` (+ `main.pdf`) for the
+main text, and `paper-SI.pdf` for the SI.
+
+---
+
 ## Scripts
 
 | Script | Purpose |
@@ -13,6 +59,7 @@ and for splitting compiled PDFs into main text and SI files.
 | `scripts/beamer_to_ams.py` | AMS converter (can also be run directly) |
 | `scripts/beamer_to_agu.py` | AGU converter (can also be run directly) |
 | `scripts/beamer_common.py` | Shared Beamer parsing (imported by both converters) |
+| `scripts/extract_main.py` | Split a combined main+SI `.tex` into a main-text-only manuscript with SI `\ref{}`s flattened and figures extracted |
 | `scripts/split_pdf.py` | Split a compiled PDF into main text and SI at a given page |
 | `scripts/make_single_figure.sh` | Extract each manuscript figure into its own `figN.pdf` file |
 
@@ -98,6 +145,51 @@ bash scripts/make_single_figure.sh manuscript.tex
 The figure count is detected automatically. Requires `pdflatex` and `pdfcrop`.
 The manuscript must use the `ametsoc` document class.
 
+### Extracting the main-text-only file
+
+At submission/revision, journals require the main text as its own file,
+separate from the Supporting Information (SI). The Beamer→manuscript
+converters produce a single combined `.tex` with main text and SI together,
+so `\ref{}` in the main text resolves directly to SI item numbers
+(`S1`, `S2`, ...). `extract_main.py` splits that combined file into a clean
+main-only manuscript, **without ever writing to the input file**:
+
+- The SI is cut at a detected boundary. New conversions emit a
+  `%% SI_BEGIN` comment sentinel automatically; legacy combined files
+  without the sentinel fall back to detecting
+  `\section*{Supporting Information...}` / `\section{Supplement...}`, or
+  finally `\renewcommand\thefigure{S\arabic{figure}}`.
+- Any `\ref{}`/`\eqref{}`/`\pageref{}` pointing at an SI item is replaced
+  with the literal number it resolved to in the combined document's
+  `.aux` (e.g. `\ref{fig:foo}` → `S3`), so the main-only file has no
+  dangling references. `\autoref`/`\cref`/`\Cref` to SI items are left
+  unchanged with a warning — the noun they print isn't recoverable from
+  the `.aux`, so these need a manual fix.
+- Each `\begin{figure}...\end{figure}` block is extracted into its own
+  `fig1.pdf`, `fig2.pdf`, ... (via `make_single_figure.sh`) and
+  `\includegraphics` is rewritten to the bare filename `figN.pdf` — no
+  directory path — so the output compiles in the publisher's flat
+  submission folder. Multi-panel figures collapse to the single cropped
+  composite.
+
+```bash
+# 1. Compile the combined main+SI document first -- extract_main.py reads
+#    its .aux for the SI item numbers (S1, S2, ...)
+TEXINPUTS=./agu/: pdflatex main-and-si.tex
+bibtex main-and-si
+TEXINPUTS=./agu/: pdflatex main-and-si.tex
+TEXINPUTS=./agu/: pdflatex main-and-si.tex
+
+# 2. Extract the main-text-only manuscript
+python scripts/extract_main.py main-and-si.tex
+# → main-and-si_main/main.tex, fig1.pdf, fig2.pdf, ...
+```
+
+By default the `.aux` is `<stem>.aux` next to the input, and output goes to
+`<stem>_main/`. Pass `--no-figures` to skip figure extraction (SI strip +
+ref flattening only), or give an explicit `.aux` path / `--outdir DIR` to
+override the defaults.
+
 ---
 
 ## What the converters do
@@ -117,6 +209,9 @@ The manuscript must use the `ametsoc` document class.
 - `enumerate`/`itemize` lists are flattened to prose sentences
 - Beamer overlay and layout commands (`\pause`, `\only`, `\alert`, `\columns`, etc.) are stripped
 - `\renewcommand\thetable`, `\setcounter{table}`, `\clearpage` passed through verbatim
+- A `%% SI_BEGIN` comment sentinel marks the SI boundary (after the
+  bibliography), consumed by `extract_main.py` when splitting out a
+  main-text-only manuscript (see *Extracting the main-text-only file* below)
 
 **AMS-specific:**
 - Author affiliations use `\aff{a}`, `\aff{b}`, … (letter-based)
@@ -364,14 +459,18 @@ tex-utility/
     beamer_to_ams.py        AMS converter
     beamer_to_agu.py        AGU converter
     beamer_common.py        Shared Beamer parsing
+    extract_main.py         Split combined main+SI .tex into main-only manuscript
     split_pdf.py            PDF splitter (main text / SI)
     make_single_figure.sh   Extract each figure into its own figN.pdf
   specs/
     beamer_to_ams_spec.md   AMS converter behavioral spec
     beamer_to_agu_spec.md   AGU converter behavioral spec
+    extract_main_spec.md    extract_main.py behavioral spec
   tests/
     run_tests.py            Regression test suite
     test_input.tex          Test Beamer source
+    test_main_si.tex        Test combined main+SI source (extract_main.py)
+    test_main_si.aux        Matching .aux fixture (extract_main.py)
   examples/                 Example Beamer sources and converted outputs
   ams/
     ametsocV6.1.cls

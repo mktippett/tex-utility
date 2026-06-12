@@ -112,13 +112,16 @@ contains `supplement` (case-insensitive):
      \bibliographystyle{<style>}   % if present
      \bibliography{<file>}
      \clearpage
+     %% SI_BEGIN
      ```
   3. The `\section{Supplemental…}` event is stripped (its following frame events
      remain, so the SI content appears after `\clearpage`).
   4. Postamble is reduced to `\end{document}`.
 
 This ensures references always precede supplemental content in the output, mirroring
-the explicit reorder logic in `beamer_to_agu.py`.
+the explicit reorder logic in `beamer_to_agu.py`. The `%% SI_BEGIN` comment
+sentinel marks the SI boundary, consumed by `extract_main.py`
+(`specs/extract_main_spec.md`) when splitting out a main-text-only manuscript.
 
 ### 4.6 Frame content transformation (`transform_content`)
 
@@ -218,3 +221,4 @@ metadata extraction from preamble.
 | 2026-05-07 | Shared: compiled module-level regex patterns for `_strip_font_size_cmds` and `preprocess_body`; `inc_re` extended to capture filename (group 2); double `frame_pat` scan in `build_event_list` eliminated; O(n²) `re.findall` in `_wrap_equations_linenomath` replaced with running depth counter | Yes |
 | 2026-05-12 | Bibliography injection made robust to inside-frame location: `_extract_bib_file`/`_extract_bib_style` scan raw source; `_build_postamble` injects explicitly; `keep_bibliographystyle=False` (was `True`) | Yes |
 | 2026-05-15 | Supplemental reorder: when `\section{Supplement*}` detected, bib commands + `\clearpage` injected before it; section marker stripped; postamble reduced to `\end{document}`. Mirrors AGU reorder logic. | Yes |
+| 2026-06-12 | Appended `%% SI_BEGIN` sentinel after `\clearpage` in the injected bib block, marking the SI boundary for `extract_main.py` | Yes |

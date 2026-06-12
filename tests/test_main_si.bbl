@@ -1,0 +1,8 @@
+\begin{thebibliography}{1}
+
+\bibitem[Smith(2020)]{smith2020}
+Smith, J. (2020).
+\newblock A test reference.
+\newblock {\em Journal of Testing}, 1(1), 1--2.
+
+\end{thebibliography}

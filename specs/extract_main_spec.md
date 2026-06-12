@@ -18,6 +18,10 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
   `figN.pdf` (via `make_single_figure.sh`) and rewrites the
   `\includegraphics` path(s) to the bare filename `figN.pdf`, collapsing
   multi-panel figures to the single cropped composite.
+- Inlines the compiled `.bbl` in place of `\bibliography{}` and comments out
+  `\bibliography{}`/`\bibliographystyle{}`, so `main.tex` compiles with
+  `pdflatex` alone (no `bibtex`, no `.bib` database needed on the
+  publisher's machine).
 
 ---
 
@@ -27,6 +31,7 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
 |------|-------|
 | `COMBINED.tex` | Combined main+SI document. Read-only. |
 | `COMBINED.aux` | `.aux` from compiling `COMBINED.tex`. Default: `<stem>.aux` next to `COMBINED.tex`. Source of SI item numbers (`S1`, `S2`, ...). If absent, SI `\ref{}`s are left unflattened (warning emitted). |
+| `COMBINED.bbl` | `.bbl` from running `bibtex` on `COMBINED.tex`. Default: `<stem>.bbl` next to `COMBINED.tex`. Inlined in place of `\bibliography{}`. If absent, `\bibliography{}` is left live (warning emitted). Skipped entirely with `--no-bib`. |
 
 ---
 
@@ -37,7 +42,7 @@ are never written.
 
 | File | Contents |
 |------|----------|
-| `main.tex` | SI removed, SI refs flattened, figure includes rewritten to `figN.pdf` |
+| `main.tex` | SI removed, SI refs flattened, figure includes rewritten to `figN.pdf`, `.bbl` inlined as `thebibliography` with `\bibliography{}`/`\bibliographystyle{}` commented out |
 | `fig1.pdf`, `fig2.pdf`, ... | One PDF per live figure environment, cropped (via `make_single_figure.sh`) |
 | `main_figures*.tex/.pdf/.log` | `make_single_figure.sh` intermediates (not cleaned up) |
 
@@ -103,7 +108,35 @@ entirely** (not just non-SI), a "stale .aux?" warning is emitted once per
 label — this also fires for labels referenced only inside commented-out
 lines (harmless, but surfaced so the user can confirm).
 
-### 4.5 Figure extraction and rewriting
+### 4.5 `.bbl` inlining (`inline_bbl`)
+
+Runs by default (after ref flattening, before `main.tex` is written); skipped
+entirely with `--no-bib`.
+
+1. Module-level, line-anchored regexes (`re.MULTILINE`) so a leading `%`
+   (already-commented line) breaks the `^[ \t]*\` anchor and such lines are
+   skipped:
+   - `_BIBLIOGRAPHY_RE = re.compile(r'^([ \t]*)(\bibliography\{[^}]*\})', re.M)`
+   - `_BIBSTYLE_RE     = re.compile(r'^([ \t]*)(\bibliographystyle\{[^}]*\})', re.M)`
+2. If no live `\bibliography{...}` is found, return `'no-bibliography'` and
+   leave `main_text` unchanged (warning emitted).
+3. Otherwise:
+   - Comment out the first live `\bibliographystyle{...}` (if any):
+     `\1%\2` (count=1). AMS combined files have one; AGU files don't, so
+     this is a no-op for AGU.
+   - Replace the first live `\bibliography{...}` (count=1) with its
+     commented form followed by the `.bbl` contents (stripped of leading/
+     trailing whitespace): `\1%\2\n\n<bbl contents>\n`. Insertion at the
+     `\bibliography{}` site preserves the converters' ordering — the
+     bibliography already sits before `%% SI_BEGIN`, so it lands in the
+     main-only file at the same place a reader would expect references.
+
+`bbl_path` defaults to `<stem>.bbl` next to `COMBINED.tex` (same derivation
+as `aux_path`). If `bbl_path` doesn't exist, `\bibliography{}` is left live
+and a warning is emitted — same graceful-degradation pattern as a missing
+`.aux`.
+
+### 4.6 Figure extraction and rewriting
 
 1. `count_figure_envs` / `_live_figure_envs`: find
    `\begin{figure}...\end{figure}` blocks (`re.DOTALL`, matching
@@ -127,7 +160,7 @@ lines (harmless, but surfaced so the user can confirm).
    composite). Commented-out blocks and all text outside live figure
    environments pass through unchanged.
 
-### 4.6 Safety
+### 4.7 Safety
 
 - `out_tex.resolve() == combined_tex.resolve()` → abort before writing
   anything (refuses to let `--outdir`/filename collide with the input).
@@ -151,6 +184,9 @@ lines (harmless, but surfaced so the user can confirm).
 | No live figure environments | Figure extraction skipped entirely |
 | `--no-figures` | SI strip + ref flattening only; `\includegraphics` paths untouched |
 | `--outdir`/output path would collide with input `.tex` | Abort before writing |
+| `.bbl` missing | `\bibliography{}`/`\bibliographystyle{}` left live; warning emitted — `main.tex` will need `bibtex` to compile |
+| No live `\bibliography{}` in main text | Nothing inlined; warning emitted (`.bbl` contents discarded) |
+| `--no-bib` | `.bbl` inlining skipped entirely; `\bibliography{}`/`\bibliographystyle{}` left live |
 
 ---
 
@@ -159,3 +195,4 @@ lines (harmless, but surfaced so the user can confirm).
 | Date | Change | Spec updated |
 |------|--------|-------------|
 | 2026-06-12 | Initial implementation: SI boundary detection (sentinel/section-marker/thefigure fallback), `.aux`-based ref flattening (`\ref`/`\eqref`/`\pageref`; `\autoref`/`\cref`/`\Cref` warn-and-skip), figure extraction via `make_single_figure.sh` with `\includegraphics` rewrite to bare `figN.pdf` and multi-panel collapse, comment-aware figure-env counting | Yes |
+| 2026-06-12 | Added `.bbl` inlining (`inline_bbl`): default-on, inlines `<stem>.bbl` as `thebibliography` in place of `\bibliography{}` and comments out `\bibliography{}`/`\bibliographystyle{}`; graceful skip + warning if `.bbl` missing or no live `\bibliography{}`; new `--bbl PATH` / `--no-bib` flags | Yes |

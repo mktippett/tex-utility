@@ -22,6 +22,7 @@ SCRIPTS_DIR = TESTS_DIR.parent / 'scripts'
 INPUT       = TESTS_DIR / 'test_input.tex'
 EXTRACT_INPUT = TESTS_DIR / 'test_main_si.tex'
 EXTRACT_AUX   = TESTS_DIR / 'test_main_si.aux'
+EXTRACT_BBL   = TESTS_DIR / 'test_main_si.bbl'
 PYTHON      = sys.executable
 
 
@@ -191,8 +192,13 @@ def check_extract_main(text):
     if n_end != 1:
         _failures.append(f'  FAIL  single \\end{{document}}: expected 1, got {n_end}')
 
-    # --- bibliography retained ---
-    check('bibliography retained',    text, r'\\bibliography\{refs\}')
+    # --- .bbl inlined, \bibliography{}/\bibliographystyle{} commented out ---
+    check('bibliographystyle commented',  text, r'^%\\bibliographystyle\{plainnat\}', flags=re.MULTILINE)
+    check('bibliography commented',       text, r'^%\\bibliography\{refs\}', flags=re.MULTILINE)
+    check('bbl content inlined',          text, r'smith2020')
+    n_thebib = len(re.findall(r'\\begin\{thebibliography\}', text))
+    if n_thebib != 1:
+        _failures.append(f'  FAIL  thebibliography count: expected 1, got {n_thebib}')
 
     # --- main-text figures retained ---
     check('main figure 1 retained',   text, r'plotA\.pdf')
@@ -299,8 +305,8 @@ def main():
 
     # --- extract_main.py: SI strip + ref flattening, never-overwrite ---
     print('\n=== extract_main (extract_main.py) ===')
-    if not EXTRACT_INPUT.exists() or not EXTRACT_AUX.exists():
-        print(f'  FAIL  fixture not found: {EXTRACT_INPUT} / {EXTRACT_AUX}')
+    if not EXTRACT_INPUT.exists() or not EXTRACT_AUX.exists() or not EXTRACT_BBL.exists():
+        print(f'  FAIL  fixture not found: {EXTRACT_INPUT} / {EXTRACT_AUX} / {EXTRACT_BBL}')
         total_fail += 1
     else:
         input_hash_before = hashlib.sha256(EXTRACT_INPUT.read_bytes()).hexdigest()

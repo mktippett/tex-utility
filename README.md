@@ -171,10 +171,16 @@ main-only manuscript, **without ever writing to the input file**:
   directory path — so the output compiles in the publisher's flat
   submission folder. Multi-panel figures collapse to the single cropped
   composite.
+- The compiled `.bbl` (from the same `bibtex` run that produced the `.aux`)
+  is inlined as a `thebibliography` environment in place of
+  `\bibliography{}`, and `\bibliography{}`/`\bibliographystyle{}` are
+  commented out — so `main.tex` compiles with `pdflatex` alone, with no
+  `bibtex` run and no `.bib` database needed on the publisher's machine.
 
 ```bash
 # 1. Compile the combined main+SI document first -- extract_main.py reads
-#    its .aux for the SI item numbers (S1, S2, ...)
+#    its .aux for the SI item numbers (S1, S2, ...) and its .bbl for the
+#    bibliography to inline
 TEXINPUTS=./agu/: pdflatex main-and-si.tex
 bibtex main-and-si
 TEXINPUTS=./agu/: pdflatex main-and-si.tex
@@ -185,10 +191,11 @@ python scripts/extract_main.py main-and-si.tex
 # → main-and-si_main/main.tex, fig1.pdf, fig2.pdf, ...
 ```
 
-By default the `.aux` is `<stem>.aux` next to the input, and output goes to
-`<stem>_main/`. Pass `--no-figures` to skip figure extraction (SI strip +
-ref flattening only), or give an explicit `.aux` path / `--outdir DIR` to
-override the defaults.
+By default the `.aux`/`.bbl` are `<stem>.aux`/`<stem>.bbl` next to the input,
+and output goes to `<stem>_main/`. Pass `--no-figures` to skip figure
+extraction (SI strip + ref flattening only), `--no-bib` to skip `.bbl`
+inlining (leaves `\bibliography{}` live), or give an explicit `.aux`/`--bbl`
+path / `--outdir DIR` to override the defaults.
 
 ---
 

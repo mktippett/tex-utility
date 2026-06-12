@@ -13,8 +13,9 @@ __pycache__/
 *.fls
 *.fdb_latexmk
 
-# ... except the extract_main.py test fixture (hand-written, not a build artifact)
+# ... except the extract_main.py test fixtures (hand-written, not build artifacts)
 !tests/test_main_si.aux
+!tests/test_main_si.bbl
 
 # PDFs
 *.pdf

@@ -21,9 +21,14 @@ writes a main-text-only manuscript to an output directory:
     fig1.pdf, fig2.pdf, ... (via make_single_figure.sh) and the
     \\includegraphics path(s) in main.tex are rewritten to the bare
     "figN.pdf" filename (multi-panel figures collapse to one image).
+  - The compiled .bbl is inlined as a thebibliography environment in place
+    of \\bibliography{}, and \\bibliography{}/\\bibliographystyle{} are
+    commented out, so main.tex compiles with pdflatex alone (no bibtex,
+    no .bib database needed on the publisher's machine).
 
 Usage:
-    python extract_main.py COMBINED.tex [COMBINED.aux] [--outdir DIR] [--no-figures]
+    python extract_main.py COMBINED.tex [COMBINED.aux] [--outdir DIR] \\
+        [--no-figures] [--no-bib] [--bbl COMBINED.bbl]
 
   COMBINED.aux defaults to <stem>.aux next to COMBINED.tex, and must be the
   .aux produced by compiling the *combined* document -- that's where the
@@ -31,10 +36,14 @@ Usage:
 
   --outdir defaults to <stem>_main/.  All output (main.tex, figN.pdf, and
   make_single_figure.sh's intermediate files) is written there.  The input
-  .tex (and .aux) are never written to.
+  .tex (.aux, and .bbl) are never written to.
 
   --no-figures skips figure extraction/rewriting (SI strip + ref flattening
   only).
+
+  --bbl defaults to <stem>.bbl next to COMBINED.tex, and must be the .bbl
+  produced by running bibtex on the *combined* document.  --no-bib skips
+  .bbl inlining and leaves \\bibliography{} live.
 """
 
 import argparse
@@ -261,19 +270,58 @@ def make_single_figures(main_tex_path):
 
 
 # ---------------------------------------------------------------------------
+# Bibliography inlining
+# ---------------------------------------------------------------------------
+
+# Line-anchored so a leading '%' (already-commented line) breaks the '^[ \t]*\'
+# anchor and is skipped.
+_BIBLIOGRAPHY_RE = re.compile(r'^([ \t]*)(\\bibliography\{[^}]*\})', re.MULTILINE)
+_BIBSTYLE_RE = re.compile(r'^([ \t]*)(\\bibliographystyle\{[^}]*\})', re.MULTILINE)
+
+
+def inline_bbl(text, bbl_text):
+    """
+    Replace the first live \\bibliography{...} with the inlined contents of
+    bbl_text (a compiled .bbl, i.e. a thebibliography environment), preceded
+    by the commented-out \\bibliography{...} line. Also comments out the
+    first live \\bibliographystyle{...}, if present.
+
+    Returns (new_text, status), where status is 'inlined' or
+    'no-bibliography' (no live \\bibliography{} found; text is unchanged).
+    """
+    if not _BIBLIOGRAPHY_RE.search(text):
+        return text, 'no-bibliography'
+
+    text = _BIBSTYLE_RE.sub(r'\1%\2', text, count=1)
+
+    def repl(m):
+        indent, cmd = m.groups()
+        return f'{indent}%{cmd}\n\n{bbl_text.strip()}\n'
+
+    text = _BIBLIOGRAPHY_RE.sub(repl, text, count=1)
+    return text, 'inlined'
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
-def extract_main(combined_tex, aux_path=None, outdir=None, make_figures=True):
+def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
+                  make_figures=True, inline_bib=True):
     """
     Write a main-text-only manuscript derived from combined_tex into outdir.
 
     combined_tex : path to the combined main+SI .tex (read-only)
     aux_path     : path to the combined document's .aux (default:
                    combined_tex with .aux suffix); used to flatten SI refs
+    bbl_path     : path to the combined document's .bbl (default:
+                   combined_tex with .bbl suffix); inlined in place of
+                   \\bibliography{} if inline_bib is True
     outdir       : output directory (default: <combined_tex stem>_main/)
     make_figures : if True, run make_single_figure.sh and rewrite
                    \\includegraphics to figN.pdf
+    inline_bib   : if True, inline the .bbl and comment out
+                   \\bibliography{}/\\bibliographystyle{}
 
     Returns the path to the written main.tex.
     """
@@ -282,6 +330,7 @@ def extract_main(combined_tex, aux_path=None, outdir=None, make_figures=True):
         sys.exit(f'Input not found: {combined_tex}')
 
     aux_path = Path(aux_path) if aux_path else combined_tex.with_suffix('.aux')
+    bbl_path = Path(bbl_path) if bbl_path else combined_tex.with_suffix('.bbl')
     outdir = Path(outdir) if outdir else combined_tex.parent / f'{combined_tex.stem}_main'
     out_tex = outdir / 'main.tex'
 
@@ -315,6 +364,20 @@ def extract_main(combined_tex, aux_path=None, outdir=None, make_figures=True):
     main_text, n_refs, warnings = flatten_refs(main_text, aux_labels)
     for w in warnings:
         print(f'Warning: {w}', file=sys.stderr)
+
+    if inline_bib:
+        if bbl_path.exists():
+            main_text, bib_status = inline_bbl(main_text, bbl_path.read_text(encoding='utf-8'))
+            if bib_status == 'inlined':
+                print(f'Inlined {bbl_path} '
+                      r'(\bibliography{}/\bibliographystyle{} commented out)')
+            else:
+                print(f'Warning: no \\bibliography{{}} found in main text; '
+                      f'{bbl_path} not inlined.', file=sys.stderr)
+        else:
+            print(f'Warning: .bbl not found ({bbl_path}); '
+                  r'\bibliography{} left live -- main.tex will need bibtex '
+                  'to compile.', file=sys.stderr)
 
     outdir.mkdir(parents=True, exist_ok=True)
     out_tex.write_text(main_text, encoding='utf-8')
@@ -351,10 +414,14 @@ def main():
     parser.add_argument('--outdir', help='Output directory (default: <stem>_main/)')
     parser.add_argument('--no-figures', action='store_true',
                          help='Skip figure extraction and \\includegraphics rewriting')
+    parser.add_argument('--bbl', help='Combined document .bbl (default: <stem>.bbl)')
+    parser.add_argument('--no-bib', action='store_true',
+                         help='Skip .bbl inlining; leave \\bibliography{} live')
     args = parser.parse_args()
 
-    extract_main(args.combined_tex, args.combined_aux, args.outdir,
-                  make_figures=not args.no_figures)
+    extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,
+                  make_figures=not args.no_figures,
+                  inline_bib=not args.no_bib)
 
 
 if __name__ == '__main__':

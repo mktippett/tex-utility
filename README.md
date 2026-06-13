@@ -188,11 +188,11 @@ TEXINPUTS=./agu/: pdflatex main-and-si.tex
 
 # 2. Extract the main-text-only manuscript
 python scripts/extract_main.py main-and-si.tex
-# → main-and-si_main/main.tex, fig1.pdf, fig2.pdf, ...
+# → main-and-si_SUBMIT/main.tex, fig1.pdf, fig2.pdf, ...
 ```
 
 By default the `.aux`/`.bbl` are `<stem>.aux`/`<stem>.bbl` next to the input,
-and output goes to `<stem>_main/`. Pass `--no-figures` to skip figure
+and output goes to `<stem>_SUBMIT/`. Pass `--no-figures` to skip figure
 extraction (SI strip + ref flattening only), `--no-bib` to skip `.bbl`
 inlining (leaves `\bibliography{}` live), or give an explicit `.aux`/`--bbl`
 path / `--outdir DIR` to override the defaults.

@@ -37,7 +37,7 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
 
 ## 3. Outputs
 
-All written to `--outdir` (default `<stem>_main/`); the input `.tex`/`.aux`
+All written to `--outdir` (default `<stem>_SUBMIT/`); the input `.tex`/`.aux`
 are never written.
 
 | File | Contents |
@@ -196,3 +196,4 @@ and a warning is emitted — same graceful-degradation pattern as a missing
 |------|--------|-------------|
 | 2026-06-12 | Initial implementation: SI boundary detection (sentinel/section-marker/thefigure fallback), `.aux`-based ref flattening (`\ref`/`\eqref`/`\pageref`; `\autoref`/`\cref`/`\Cref` warn-and-skip), figure extraction via `make_single_figure.sh` with `\includegraphics` rewrite to bare `figN.pdf` and multi-panel collapse, comment-aware figure-env counting | Yes |
 | 2026-06-12 | Added `.bbl` inlining (`inline_bbl`): default-on, inlines `<stem>.bbl` as `thebibliography` in place of `\bibliography{}` and comments out `\bibliography{}`/`\bibliographystyle{}`; graceful skip + warning if `.bbl` missing or no live `\bibliography{}`; new `--bbl PATH` / `--no-bib` flags | Yes |
+| 2026-06-13 | Changed default `--outdir` suffix from `<stem>_main/` to `<stem>_SUBMIT/` | Yes |

@@ -34,7 +34,7 @@ Usage:
   .aux produced by compiling the *combined* document -- that's where the
   SI item numbers (S1, S2, ...) come from.
 
-  --outdir defaults to <stem>_main/.  All output (main.tex, figN.pdf, and
+  --outdir defaults to <stem>_SUBMIT/.  All output (main.tex, figN.pdf, and
   make_single_figure.sh's intermediate files) is written there.  The input
   .tex (.aux, and .bbl) are never written to.
 
@@ -317,7 +317,7 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     bbl_path     : path to the combined document's .bbl (default:
                    combined_tex with .bbl suffix); inlined in place of
                    \\bibliography{} if inline_bib is True
-    outdir       : output directory (default: <combined_tex stem>_main/)
+    outdir       : output directory (default: <combined_tex stem>_SUBMIT/)
     make_figures : if True, run make_single_figure.sh and rewrite
                    \\includegraphics to figN.pdf
     inline_bib   : if True, inline the .bbl and comment out
@@ -331,7 +331,7 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
 
     aux_path = Path(aux_path) if aux_path else combined_tex.with_suffix('.aux')
     bbl_path = Path(bbl_path) if bbl_path else combined_tex.with_suffix('.bbl')
-    outdir = Path(outdir) if outdir else combined_tex.parent / f'{combined_tex.stem}_main'
+    outdir = Path(outdir) if outdir else combined_tex.parent / f'{combined_tex.stem}_SUBMIT'
     out_tex = outdir / 'main.tex'
 
     if out_tex.resolve() == combined_tex.resolve():
@@ -411,7 +411,7 @@ def main():
     parser.add_argument('combined_tex', help='Combined main+SI .tex (read-only)')
     parser.add_argument('combined_aux', nargs='?',
                          help='Combined document .aux (default: <stem>.aux)')
-    parser.add_argument('--outdir', help='Output directory (default: <stem>_main/)')
+    parser.add_argument('--outdir', help='Output directory (default: <stem>_SUBMIT/)')
     parser.add_argument('--no-figures', action='store_true',
                          help='Skip figure extraction and \\includegraphics rewriting')
     parser.add_argument('--bbl', help='Combined document .bbl (default: <stem>.bbl)')

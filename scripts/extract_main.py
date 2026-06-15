@@ -14,9 +14,14 @@ This script takes that combined, already-compiled .tex (+ its .aux) and
 writes a main-text-only manuscript to an output directory:
 
   - The SI is cut at a detected boundary (never touching the input file).
-  - Any \\ref{}/\\eqref{}/\\pageref{} pointing at an SI item is replaced with
-    the literal number from the .aux (e.g. \\ref{fig:foo} -> S3), so the
-    main-only file has no dangling references.
+  - \\ref{}/\\eqref{}/\\autoref{}/\\cref{}/\\Cref{} pointing at an SI item are
+    left UNCHANGED. A small block of \\label{}-reconstructions (built from
+    the .aux's S1, S2, ... numbers) is inserted just before \\end{document},
+    wrapped in %TC:ignore since it produces no visible text, so these \\ref{}
+    commands resolve via LaTeX's normal two-pass mechanism -- no dangling
+    references, and no inflation of texcount's word count.
+    \\pageref{} to an SI item IS replaced with the literal page number from
+    the .aux, since the SI's own page numbering doesn't exist in main.tex.
   - Each \\begin{figure}...\\end{figure} block is extracted into its own
     fig1.pdf, fig2.pdf, ... (via make_single_figure.sh) and the
     \\includegraphics path(s) in main.tex are rewritten to the bare
@@ -76,6 +81,13 @@ _SECTION_PATTERNS = [
 # SI sections use.
 _THEFIGURE_RE = re.compile(r'\\renewcommand\\thefigure\{S\\arabic\{figure\}\}')
 
+# texcount word-count markers. Both converters wrap the endmatter+bibliography
+# +SI block in a single %TC:ignore (before the endmatter) / %TC:endignore
+# (after the SI, just before \end{document}) pair -- so truncating at the SI
+# boundary keeps the %TC:ignore but drops its %TC:endignore.
+_TC_IGNORE_RE = re.compile(r'^[ \t]*%TC:ignore[ \t]*$', re.MULTILINE)
+_TC_ENDIGNORE_RE = re.compile(r'^[ \t]*%TC:endignore[ \t]*$', re.MULTILINE)
+
 
 def find_si_start(text):
     """
@@ -100,8 +112,18 @@ def find_si_start(text):
 
 def strip_si(text, si_start):
     """Return the text truncated before si_start, with a single trailing
-    \\end{document} restored."""
+    \\end{document} restored.
+
+    If the truncation orphaned a %TC:ignore (its matching %TC:endignore was
+    inside the removed SI), re-close it with a %TC:endignore before
+    \\end{document} so texcount doesn't run off the end of the file."""
     main = text[:si_start].rstrip() + '\n'
+
+    n_open = len(_TC_IGNORE_RE.findall(main))
+    n_close = len(_TC_ENDIGNORE_RE.findall(main))
+    if n_open > n_close:
+        main += '%TC:endignore\n' * (n_open - n_close)
+
     if not re.search(r'\\end\{document\}\s*\Z', main):
         main += '\n\\end{document}\n'
     return main
@@ -129,28 +151,48 @@ def parse_aux_labels(aux_text):
 # \ref, \ref*, \eqref, \eqref*, \pageref, \pageref*, \autoref, \cref, \Cref
 _REF_CMD_RE = re.compile(r'\\(ref|eqref|pageref|autoref|[Cc]ref)(\*?)\{([^}]+)\}')
 
+# Label-name prefix -> LaTeX counter, used by build_si_label_block to guess
+# which counter (\thefigure / \thetable / \theequation) a label belongs to.
+_LABEL_COUNTER_PREFIXES = (
+    (re.compile(r'^fig(?:ure)?:', re.IGNORECASE), 'figure'),
+    (re.compile(r'^tab(?:le)?:', re.IGNORECASE), 'table'),
+    (re.compile(r'^eq(?:uation)?:', re.IGNORECASE), 'equation'),
+)
+
+
+def _guess_counter(label):
+    for pat, counter in _LABEL_COUNTER_PREFIXES:
+        if pat.match(label):
+            return counter
+    return None
+
 
 def flatten_refs(text, aux_labels):
     """
-    Replace \\ref{}/\\eqref{}/\\pageref{} commands that point at an SI label
-    (an .aux \\newlabel whose ref text starts with "S") with the literal
-    text the combined document resolved them to.
+    \\ref{}/\\eqref{}/\\autoref{}/\\cref{}/\\Cref{} commands pointing at an SI
+    label (an .aux \\newlabel whose ref text starts with "S") are left
+    UNCHANGED -- build_si_label_block() reconstructs the label at the end of
+    main.tex so LaTeX's normal two-pass \\ref resolution fills them in (0
+    words in texcount, same as any other \\ref).
 
-    \\autoref{}/\\cref{}/\\Cref{} pointing at SI labels are left unchanged --
-    the "Figure"/"Table"/"section" noun they print isn't recoverable from
-    the .aux -- and reported as warnings for manual fix-up.
+    \\pageref{} to an SI label IS flattened to the literal page number from
+    the .aux: the SI's own page numbering (\\setcounter{page}{1}) doesn't
+    exist in the SI-stripped main.tex, so there's no label to reconstruct.
 
-    Returns (new_text, n_replaced, warnings).
+    Returns (new_text, si_labels_used, n_pagerefs, warnings), where
+    si_labels_used is {label: {'ref': ..., 'needs_noun': bool}} for
+    build_si_label_block().
     """
     si_labels = {label: info for label, info in aux_labels.items()
                   if info['ref'].startswith('S')}
 
-    n_replaced = 0
+    si_labels_used = {}
+    n_pagerefs = 0
     warnings = []
     missing_warned = set()
 
     def repl(m):
-        nonlocal n_replaced
+        nonlocal n_pagerefs
         cmd, star, label = m.groups()
         if label not in si_labels:
             if label not in aux_labels and label not in missing_warned:
@@ -161,25 +203,82 @@ def flatten_refs(text, aux_labels):
             return m.group(0)
 
         info = si_labels[label]
-        if cmd == 'ref':
-            n_replaced += 1
-            return info['ref']
-        if cmd == 'eqref':
-            n_replaced += 1
-            return '(' + info['ref'] + ')'
         if cmd == 'pageref':
-            n_replaced += 1
+            n_pagerefs += 1
             return info['page']
 
-        # autoref / cref / Cref
-        warnings.append(
-            f"\\{cmd}{star}{{{label}}} resolves to SI item {info['ref']} but "
-            "was left unchanged -- autoref/cref noun text (Figure/Table/"
-            "section...) isn't recoverable from the .aux; fix by hand.")
+        entry = si_labels_used.setdefault(
+            label, {'ref': info['ref'], 'needs_noun': False})
+        if cmd in ('autoref', 'cref', 'Cref'):
+            entry['needs_noun'] = True
         return m.group(0)
 
     new_text = _REF_CMD_RE.sub(repl, text)
-    return new_text, n_replaced, warnings
+    return new_text, si_labels_used, n_pagerefs, warnings
+
+
+def build_si_label_block(si_labels_used):
+    """
+    Return (block, warnings): a %TC:ignore-wrapped block of invisible
+    \\label{} reconstructions, one per entry in si_labels_used, so
+    \\ref{}/\\eqref{}/\\autoref{}/\\cref{}/\\Cref{} commands left unchanged
+    by flatten_refs resolve correctly (via LaTeX's normal two-pass \\ref
+    mechanism) once the SI -- and its labels -- are gone from main.tex.
+
+    The block produces no visible output, so wrapping it in %TC:ignore is
+    accurate (zero words of manuscript text), not a workaround.
+
+    For labels whose counter can be guessed from a fig:/tab:/eq: prefix
+    (_guess_counter), \\refstepcounter is used so \\autoref/\\cref/\\Cref
+    also print the right noun. For other labels, only \\@currentlabel is
+    set directly -- \\ref/\\eqref still resolve, but if \\autoref/\\cref/
+    \\Cref was used on that label a warning is emitted (noun may be wrong).
+
+    Returns ('', []) if si_labels_used is empty.
+    """
+    if not si_labels_used:
+        return '', []
+
+    warnings = []
+    lines = ['%TC:ignore']
+    for label, info in si_labels_used.items():
+        ref = info['ref']
+        counter = _guess_counter(label)
+        if counter:
+            lines.append(
+                r'{\renewcommand\the' + counter + '{' + ref + '}'
+                r'\refstepcounter{' + counter + '}'
+                r'\label{' + label + '}}')
+        else:
+            lines.append(r'{\def\@currentlabel{' + ref + r'}\label{' + label + '}}')
+            if info['needs_noun']:
+                warnings.append(
+                    f"label '{label}' is used with \\autoref/\\cref/\\Cref "
+                    "but its type (figure/table/equation) couldn't be "
+                    "guessed from its name (expected a fig:/tab:/eq: "
+                    f"prefix); \\ref will resolve to '{ref}' but the "
+                    "printed noun may be missing or wrong -- fix by hand.")
+    lines.append('%TC:endignore')
+    return '\n'.join(lines) + '\n', warnings
+
+
+def insert_si_label_block(text, si_labels_used):
+    """
+    Insert build_si_label_block(si_labels_used) immediately before the
+    trailing \\end{document} (strip_si guarantees exactly one, at the end).
+
+    Returns (new_text, warnings); (text, []) unchanged if si_labels_used is
+    empty.
+    """
+    block, warnings = build_si_label_block(si_labels_used)
+    if not block:
+        return text, warnings
+    new_text, n = re.subn(r'\\end\{document\}\s*\Z',
+                           lambda m: block + m.group(0), text)
+    if n == 0:
+        sys.exit(r'Could not find \end{document} to insert the SI label '
+                 'reconstruction block.')
+    return new_text, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +460,7 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
               'be flattened and will render as ?? if referenced.',
               file=sys.stderr)
 
-    main_text, n_refs, warnings = flatten_refs(main_text, aux_labels)
+    main_text, si_labels_used, n_pagerefs, warnings = flatten_refs(main_text, aux_labels)
     for w in warnings:
         print(f'Warning: {w}', file=sys.stderr)
 
@@ -379,9 +478,14 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
                   r'\bibliography{} left live -- main.tex will need bibtex '
                   'to compile.', file=sys.stderr)
 
+    main_text, label_warnings = insert_si_label_block(main_text, si_labels_used)
+    for w in label_warnings:
+        print(f'Warning: {w}', file=sys.stderr)
+
     outdir.mkdir(parents=True, exist_ok=True)
     out_tex.write_text(main_text, encoding='utf-8')
-    print(f'Wrote {out_tex} ({n_refs} SI ref(s) flattened)')
+    print(f'Wrote {out_tex} ({len(si_labels_used)} SI ref(s) preserved via '
+          f'reconstructed \\label, {n_pagerefs} \\pageref flattened)')
 
     if make_figures:
         n_figs = count_figure_envs(main_text)

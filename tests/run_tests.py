@@ -200,21 +200,42 @@ def check_extract_main(text):
     if n_thebib != 1:
         _failures.append(f'  FAIL  thebibliography count: expected 1, got {n_thebib}')
 
+    # --- %TC:ignore re-closed (its %TC:endignore was inside the removed SI) ---
+    n_ignore    = len(re.findall(r'^[ \t]*%TC:ignore[ \t]*$', text, re.MULTILINE))
+    n_endignore = len(re.findall(r'^[ \t]*%TC:endignore[ \t]*$', text, re.MULTILINE))
+    if n_ignore != n_endignore:
+        _failures.append(
+            f'  FAIL  TC:ignore balance: {n_ignore} %TC:ignore vs '
+            f'{n_endignore} %TC:endignore')
+    check('TC:endignore before \\end{document}', text,
+          r'%TC:endignore\s*\\end\{document\}')
+
     # --- main-text figures retained ---
     check('main figure 1 retained',   text, r'plotA\.pdf')
     check('main figure 2 retained',   text, r'plotB1\.pdf')
 
-    # --- \ref{} to SI label flattened to literal S1 ---
-    check('ref to SI figure -> S1',   text, r'Figure~S1')
-    check('ref to SI table -> S1',    text, r'Table~S1')
-    check('eqref to SI eq -> (S1)',   text, r'Eq\.~\(S1\)')
-    check('pageref to SI fig -> 2',   text, r'page~2')
+    # --- \ref{}/\eqref{}/\Cref{} to SI labels left UNCHANGED in text ---
+    check('ref to SI figure unchanged', text, r'Figure~\\ref\{fig:si1\}')
+    check('ref to SI table unchanged',  text, r'Table~\\ref\{tab:si1\}')
+    check('eqref to SI eq unchanged',   text, r'Eq\.~\\eqref\{eq:si1\}')
+    check('Cref to SI label unchanged', text, r'\\Cref\{fig:si1\}')
+
+    # --- \pageref{} to SI label flattened to literal page number ---
+    check('pageref to SI fig -> 2',     text, r'page~2')
+    check('no EMref wrapper left behind', text, r'\\EMref', present=False)
+
+    # --- reconstructed \label{} block for SI refs, wrapped in %TC:ignore ---
+    check('SI label reconstruction: fig:si1', text,
+          r'\\renewcommand\\thefigure\{S1\}\\refstepcounter\{figure\}\\label\{fig:si1\}')
+    check('SI label reconstruction: tab:si1', text,
+          r'\\renewcommand\\thetable\{S1\}\\refstepcounter\{table\}\\label\{tab:si1\}')
+    check('SI label reconstruction: eq:si1', text,
+          r'\\renewcommand\\theequation\{S1\}\\refstepcounter\{equation\}\\label\{eq:si1\}')
 
     # --- \ref{} to a main-text label left unchanged ---
     check('ref to main figure unchanged', text, r'\\ref\{fig:main1\}')
 
-    # --- \Cref/stale \ref left unchanged (warn-and-skip / stale .aux) ---
-    check('Cref to SI label unchanged',   text, r'\\Cref\{fig:si1\}')
+    # --- stale \ref left unchanged (warn-and-skip on missing .aux entry) ---
     check('stale ref unchanged',          text, r'\\ref\{fig:stale\}')
 
 

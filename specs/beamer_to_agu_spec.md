@@ -142,7 +142,11 @@ are stripped by `transform_content` (added to the cleanup command list), prevent
 duplicate `\bibstyle`/`\bibdata` errors in BibTeX.
 
 `extract_passthrough_packages` (in `beamer_common.py`) passes through
-`\usepackage` lines containing `amsmath`, `amssymb`, or `bm`.
+`\usepackage` lines whose package names are all in a curated allowlist:
+math (`amsmath`, `amssymb`, `bm`, `mathtools`) and tables (`booktabs`,
+`multirow`, `array`, `tabularx`, `makecell`, `threeparttable`, `dcolumn`,
+`longtable`).  Lines with any package not in the list are dropped (avoids
+beamer-only and class-provided duplicates).  Options (`[...]`) are preserved.
 
 ### 4.7 Bibliography file extraction (`_extract_bib_file`)
 
@@ -299,3 +303,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-05-07 | Shared: compiled module-level regex patterns (`_FONTSIZE_SELECTFONT_RE`, `_FONT_STYLE_RE`, `_BEAMER_BODY_CMDS_RE`, `_BEAMER_SETUP_RE`) eliminate per-call compiles in `_strip_font_size_cmds` and `preprocess_body`; `inc_re` extended with filename capture group (group 2); double `frame_pat` scan in `build_event_list` collapsed to single pass; O(n²) `re.findall` in `_wrap_equations_linenomath` replaced with running `depth` counter; `em_idx` search replaced with `len(events)-1` | Yes |
 | 2026-05-07 | Shared: `_KP_DEFAULTS` defined once at module level; removes duplicate literal list from `_extract_key_points` and `_build_agu_preamble` | Yes |
 | 2026-06-12 | `_build_si_header`: prepend `%% SI_BEGIN` sentinel as the first line of the returned block (before `\clearpage`), marking the SI boundary for `extract_main.py` | Yes |
+| 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |

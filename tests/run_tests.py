@@ -83,6 +83,9 @@ def check_agu(text):
     check('amsmath pkg',               text, r'\\usepackage\{amsmath\}')
     check('amssymb pkg',               text, r'\\usepackage\{amssymb\}')
     check('bm pkg',                    text, r'\\usepackage\{bm\}')
+    check('booktabs pkg',              text, r'\\usepackage\{booktabs\}')
+    check('multirow pkg',              text, r'\\usepackage\{multirow\}')
+    check('no appendixnumberbeamer',   text, r'appendixnumberbeamer', present=False)
     check('bibliographystyle absent',  text, r'\\bibliographystyle', present=False)
 
     # --- special AGU preamble sections ---
@@ -147,6 +150,9 @@ def check_manuscript(text):
     check('corresponding author',      text, r'\\correspondingauthor\{')
     check('amsmath pkg',               text, r'\\usepackage\{amsmath\}')
     check('bm pkg',                    text, r'\\usepackage\{bm\}')
+    check('booktabs pkg',              text, r'\\usepackage\{booktabs\}')
+    check('multirow pkg',              text, r'\\usepackage\{multirow\}')
+    check('no appendixnumberbeamer',   text, r'appendixnumberbeamer', present=False)
     check('bibliographystyle kept',    text, r'\\bibliographystyle\{plainnat\}')
 
     # --- abstract ---

@@ -30,6 +30,18 @@ _BEAMER_SETUP_RE = re.compile(
     r'setbeamerfont|setbeamersize)(?:\[[^\]]*\])?\{[^}]*\}'
 )
 
+# Curated allowlist for extract_passthrough_packages: packages that are safe
+# and useful in both AMS and AGU manuscript classes.  Excludes packages already
+# hardcoded in the converter preamble templates (graphicx, natbib, caption,
+# url, hyperref) and beamer-only packages (appendixnumberbeamer, themes).
+_PASSTHROUGH_PACKAGES = frozenset({
+    # math
+    'amsmath', 'amssymb', 'bm', 'mathtools',
+    # tables
+    'booktabs', 'multirow', 'array', 'tabularx',
+    'makecell', 'threeparttable', 'dcolumn', 'longtable',
+})
+
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
@@ -462,16 +474,28 @@ def _extract_preamble(src):
 
 
 def extract_passthrough_packages(src):
-    """
-    Return \\usepackage lines from the Beamer preamble that contain amsmath or amssymb.
-    Deduplicates by exact line content. Returns a newline-joined string, or '' if none.
+    r"""
+    Return \\usepackage lines from the Beamer preamble whose packages are all in
+    the curated ``_PASSTHROUGH_PACKAGES`` allowlist (math + table packages).
+
+    A line like ``\usepackage[opts]{a,b}`` is passed through unchanged only if
+    every package name (a, b) is in the allowlist.  Options are preserved.
+    Deduplicates by exact line content. Returns a newline-joined string, or ''
+    if none.
     """
     preamble = _extract_preamble(src)
     seen = set()
     lines = []
     for line in preamble.splitlines():
         s = line.strip()
-        if s.startswith(r'\usepackage') and ('amsmath' in s or 'amssymb' in s or 'bm' in s):
+        if not s.startswith(r'\usepackage'):
+            continue
+        # Extract the braced package list: \usepackage[...]{pkg1,pkg2}
+        m = re.search(r'\{([^}]+)\}', s)
+        if not m:
+            continue
+        pkg_names = {p.strip() for p in m.group(1).split(',')}
+        if pkg_names and pkg_names <= _PASSTHROUGH_PACKAGES:
             if s not in seen:
                 seen.add(s)
                 lines.append(s)

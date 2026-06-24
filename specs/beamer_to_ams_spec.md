@@ -222,3 +222,4 @@ metadata extraction from preamble.
 | 2026-05-12 | Bibliography injection made robust to inside-frame location: `_extract_bib_file`/`_extract_bib_style` scan raw source; `_build_postamble` injects explicitly; `keep_bibliographystyle=False` (was `True`) | Yes |
 | 2026-05-15 | Supplemental reorder: when `\section{Supplement*}` detected, bib commands + `\clearpage` injected before it; section marker stripped; postamble reduced to `\end{document}`. Mirrors AGU reorder logic. | Yes |
 | 2026-06-12 | Appended `%% SI_BEGIN` sentinel after `\clearpage` in the injected bib block, marking the SI boundary for `extract_main.py` | Yes |
+| 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |

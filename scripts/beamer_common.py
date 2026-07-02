@@ -30,6 +30,13 @@ _BEAMER_SETUP_RE = re.compile(
     r'setbeamerfont|setbeamersize)(?:\[[^\]]*\])?\{[^}]*\}'
 )
 
+# Separates entries in \author{...}. Three styles seen in the wild, all
+# accepted: the Beamer '\and' command ("A\inst{1} \and B\inst{2}"), a
+# comma-separated English list ("A, B, and C"), and a bare-'and' list with
+# no commas ("A and B and C"). Alternatives are ordered so a comma (with or
+# without a following "and") is preferred over the bare-'and' fallback.
+_AUTHOR_SEP_RE = re.compile(r'\s*\\and\b\s*|\s*,\s*and\s+|\s*,\s*|\s+and\s+')
+
 # Curated allowlist for extract_passthrough_packages: packages that are safe
 # and useful in both AMS and AGU manuscript classes.  Excludes packages already
 # hardcoded in the converter preamble templates (graphicx, natbib, caption,
@@ -525,7 +532,7 @@ def _parse_inst_blocks(src):
     The caller handles the no-\\inst fallback (default text differs by format).
     """
     author_raw = _extract_preamble_arg(src, 'author') or ''
-    raw_authors = [a.strip() for a in re.split(r'\s+and\s+', author_raw) if a.strip()]
+    raw_authors = [a.strip() for a in _AUTHOR_SEP_RE.split(author_raw) if a.strip()]
     parsed = []
     for entry in raw_authors:
         inst_m = re.search(r'\\inst\{(\d+)\}', entry)

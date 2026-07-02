@@ -203,7 +203,9 @@ path / `--outdir DIR` to override the defaults.
 
 **From the Beamer preamble:**
 - `\title[short]{Long title}` → manuscript title
-- `\author{Name\inst{1} and Name\inst{2}}` → author list with affiliations
+- `\author{...}` → author list with affiliations. Accepts either Beamer's
+  `\and`-separated form (`Name\inst{1} \and Name\inst{2}`) or a plain
+  comma-separated English list (`Name\inst{1}, Name\inst{2}, and Name\inst{3}`)
 - `\institute{\inst{1} Affil one \and \inst{2} Affil two}` → affiliation block
 
 **From the body:**
@@ -222,6 +224,9 @@ path / `--outdir DIR` to override the defaults.
 
 **AMS-specific:**
 - Author affiliations use `\aff{a}`, `\aff{b}`, … (letter-based)
+- Byline follows the AMS template convention: a comma after each author name
+  except the last, and `and` before the last author only (not between every
+  pair) — e.g. `Name One,\aff{a} Name Two,\aff{b} and Name Three\aff{c}`
 - `\abstract{...}` command form
 - `natbib` / `\citep` / `\citet` — kept as-is
 - `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and

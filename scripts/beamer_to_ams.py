@@ -120,13 +120,19 @@ def convert(input_path, output_path):
     authors, affiliation_block = _parse_authors_affiliations(src)
 
     author_parts = []
+    last = len(authors) - 1
     for idx, (name, aff) in enumerate(authors):
-        part = name + r'\aff{' + aff + '}'
+        part = name
+        if idx != last:
+            part += ','
+        part += r'\aff{' + aff + '}'
         if idx == 0:
             abbrev = _abbreviate_name(name)
             part += r'\correspondingauthor{' + abbrev + ',\n    email@institution.edu}'
+        if idx == last and last > 0:
+            part = 'and ' + part
         author_parts.append(part)
-    authors_block = r'\authors{' + ' and '.join(author_parts) + '}'
+    authors_block = r'\authors{' + ' '.join(author_parts) + '}'
 
     body = preprocess_body(src)
     events = build_event_list(body, keep_bibliographystyle=False)

@@ -21,7 +21,7 @@ Key preamble commands parsed:
 | Command | Extracted field |
 |---------|----------------|
 | `\title[short]{Long title}` | AMS `\title{}` |
-| `\author[short]{Name\inst{N} and Name\inst{N}}` | AMS `\authors{}` with `\aff{}` and `\correspondingauthor{}` |
+| `\author[short]{Name\inst{N} \and Name\inst{N}}` or `\author[short]{Name\inst{N}, Name\inst{N}, and Name\inst{N}}` | AMS `\authors{}` with `\aff{}` and `\correspondingauthor{}` |
 | `\institute[]{...}` | AMS `\affiliation{\aff{a}{...}\\...}` |
 
 ---
@@ -47,10 +47,18 @@ Output postamble:
 
 1. **Title**: regex for `\title[opt]{...}`, extract with `_extract_brace_group`.
 2. **Authors / affiliations**: call `_parse_inst_blocks(src)` (shared,
-   `beamer_common.py`) to parse `\author{Name\inst{N} and ...}` and
-   `\institute{\inst{N} text \and \inst{N} text}`.  Map `\inst{N}` numbers
-   to `aff` letters (a, b, …) in order of first appearance.  Build:
-   - `\authors{Name\aff{a}\correspondingauthor{Abbrev.,\n    email} and Name\aff{b}}`
+   `beamer_common.py`) to parse `\author{...}` and
+   `\institute{\inst{N} text \and \inst{N} text}`.  The author list is split
+   on either the Beamer `\and` command or a comma-separated English list
+   (`_AUTHOR_SEP_RE` in `beamer_common.py`), so both
+   `Name\inst{N} \and Name\inst{N}` and
+   `Name\inst{N}, Name\inst{N}, and Name\inst{N}` are accepted. Map `\inst{N}`
+   numbers to `aff` letters (a, b, …) in order of first appearance.  Build:
+   - `\authors{}` joined per the AMS template byline convention: a comma
+     immediately after each name (before `\aff{}`) except the last author,
+     and a literal `and ` prefix on the last author only — e.g.
+     `\authors{Name\aff{a}\correspondingauthor{Abbrev.,\n    email} Name\aff{b} and Name\aff{c}}`
+     (not `and`-joined between every pair)
    - `\affiliation{\n  \aff{a}{text}\\\n  \aff{b}{text}\n}`
    First author is assumed corresponding; abbreviated name uses initials
    for all words except the last (`_abbreviate_name`).
@@ -223,3 +231,5 @@ metadata extraction from preamble.
 | 2026-05-15 | Supplemental reorder: when `\section{Supplement*}` detected, bib commands + `\clearpage` injected before it; section marker stripped; postamble reduced to `\end{document}`. Mirrors AGU reorder logic. | Yes |
 | 2026-06-12 | Appended `%% SI_BEGIN` sentinel after `\clearpage` in the injected bib block, marking the SI boundary for `extract_main.py` | Yes |
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
+| 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |
+| 2026-07-02 | `_parse_authors_affiliations` (AMS): `\authors{}` join changed from `and`-between-every-author to the AMS template byline convention — comma after each name except the last, `and` before the last author only | Yes |

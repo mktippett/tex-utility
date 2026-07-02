@@ -142,9 +142,9 @@ def check_agu(text):
 def check_manuscript(text):
     # --- preamble metadata ---
     check('AMS docclass',              text, r'\\documentclass\{ametsocV6\.1\}')
-    check('author One aff a',          text, r'Author One\\aff\{a\}')
-    check('author Two aff b',          text, r'Author Two\\aff\{b\}')
-    check('author Three aff a',        text, r'Author Three\\aff\{a\}')
+    check('author One aff a',          text, r'Author One,\\aff\{a\}')
+    check('author Two aff b',          text, r'Author Two,\\aff\{b\}')
+    check('author Three aff a',        text, r'and Author Three\\aff\{a\}')
     check('affiliation aff{a} text',   text, r'\\aff\{a\}\{Department of Atmospheric Science')
     check('affiliation aff{b} text',   text, r'\\aff\{b\}\{Institute of Oceanography')
     check('corresponding author',      text, r'\\correspondingauthor\{')

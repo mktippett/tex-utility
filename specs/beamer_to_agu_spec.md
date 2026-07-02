@@ -23,7 +23,7 @@ Key preamble commands parsed:
 | Command | Extracted field |
 |---------|----------------|
 | `\title[short]{Long title}` | AGU `\title{}` |
-| `\author[short]{Name\inst{N} and Name\inst{N}}` | AGU `\authors{}` with `\affil{N}` numbers |
+| `\author[short]{Name\inst{N} \and Name\inst{N}}` or `\author[short]{Name\inst{N}, Name\inst{N}, and Name\inst{N}}` | AGU `\authors{}` with `\affil{N}` numbers |
 | `\institute[]{...}` | AGU `\affiliation{N}{...}` lines |
 
 ---
@@ -77,8 +77,11 @@ Steps 4.1–4.4 are shared with the AMS converter via `beamer_common.py`:
 ### 4.2 AGU author/affiliation parsing (`_parse_authors_affiliations_agu`)
 
 Calls `_parse_inst_blocks(src)` (shared, `beamer_common.py`) to parse
-`\author{Name\inst{N} and ...}` and `\institute{...}`, then produces
-AGU-specific markup:
+`\author{...}` and `\institute{...}`, then produces AGU-specific markup.
+The author list is split on either the Beamer `\and` command or a
+comma-separated English list (`_AUTHOR_SEP_RE`), so both
+`Name\inst{N} \and Name\inst{N}` and
+`Name\inst{N}, Name\inst{N}, and Name\inst{N}` are accepted:
 
 - `\inst{N}` numbers map **directly** to `\affil{N}` (no letter conversion).
 - `\authors{...}` uses comma separation with "and" before the last author
@@ -304,3 +307,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-05-07 | Shared: `_KP_DEFAULTS` defined once at module level; removes duplicate literal list from `_extract_key_points` and `_build_agu_preamble` | Yes |
 | 2026-06-12 | `_build_si_header`: prepend `%% SI_BEGIN` sentinel as the first line of the returned block (before `\clearpage`), marking the SI boundary for `extract_main.py` | Yes |
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
+| 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |

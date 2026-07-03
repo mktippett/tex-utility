@@ -108,7 +108,7 @@ Scan the preprocessed body and build a sorted list of `(position, type, content)
 
 | Type | Source pattern | Output |
 |------|---------------|--------|
-| `section` | `\section{Title}` or `\section*{Title}` | `\section{Title}` |
+| `section` | `\section{Title}`, `\section*{Title}`, `\subsection{Title}`, or `\subsection*{Title}` | Same command, unchanged (`\section{Title}` or `\subsection{Title}`) |
 | `frame` | `\begin{frame}...\end{frame}` | transformed prose/figures |
 | `passthrough` | `\renewcommand\thefigure{...}`, `\setcounter{figure}{...}`, `\renewcommand\thetable{...}`, `\setcounter{table}{...}`, `\clearpage` outside frames | verbatim |
 
@@ -229,6 +229,7 @@ metadata extraction from preamble.
 | `\author` without `\inst{}` markers | Authors assigned aff letters sequentially; single `\affiliation` placeholder |
 | `\section{Abstract}` | Consumed into `\abstract{}` preamble block; removed from body |
 | `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
+| `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
 
 ---
 
@@ -266,5 +267,6 @@ metadata extraction from preamble.
 | 2026-06-12 | Appended `%% SI_BEGIN` sentinel after `\clearpage` in the injected bib block, marking the SI boundary for `extract_main.py` | Yes |
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
 | 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |
+| 2026-07-03 | Shared: section-event regex extended from `\section` to `\(?:sub\)?section` in `build_event_list` and `extract_abstract`'s title match; `\subsection{...}`/`\subsection*{...}` outside a frame is now captured as a `section` event and passed through verbatim (previously matched no event type and was silently dropped) | Yes |
 | 2026-07-02 | `_parse_authors_affiliations` (AMS): `\authors{}` join changed from `and`-between-every-author to the AMS template byline convention — comma after each name except the last, `and` before the last author only | Yes |
 | 2026-07-02 | Added `%TC:ignore`/`%TC:endignore` markers for AMS's word-limit rule: front matter (title/authors/affiliation/abstract), every caption (new `caption_tcignore` option on `_restructure_figures`/`figure_opts`, off by default so AGU is unaffected), and the SI region (opens after `%% SI_BEGIN`, closes before `\end{document}`) | Yes |

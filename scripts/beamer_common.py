@@ -645,7 +645,7 @@ def build_event_list(body, keep_bibliographystyle=True):
     (position, type, content) events.
 
     Types:
-      'section'     — \\section{Title}
+      'section'     — \\section{Title} or \\subsection{Title}
       'frame'       — frame content (transformed later)
       'passthrough' — figure-counter resets and bibliography commands
 
@@ -654,7 +654,7 @@ def build_event_list(body, keep_bibliographystyle=True):
     """
     events = []
 
-    for m in re.finditer(r'\\section\*?\{([^}]*)\}(?:\s*\\label\{[^}]*\})?', body):
+    for m in re.finditer(r'\\(?:sub)?section\*?\{([^}]*)\}(?:\s*\\label\{[^}]*\})?', body):
         events.append((m.start(), 'section', m.group(0).strip()))
 
     frame_pat = re.compile(r'\\begin\{frame\}.*?\\end\{frame\}', re.DOTALL)
@@ -694,7 +694,7 @@ def extract_abstract(events):
     i = 0
     while i < len(events):
         _pos, etype, content = events[i]
-        sec_title_m = re.match(r'\\section\*?\{([^}]*)\}', content)
+        sec_title_m = re.match(r'\\(?:sub)?section\*?\{([^}]*)\}', content)
         sec_title = sec_title_m.group(1).strip().lower() if sec_title_m else ''
         if etype == 'section' and sec_title == 'abstract':
             abstract_parts = []

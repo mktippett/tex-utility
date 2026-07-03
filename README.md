@@ -209,7 +209,8 @@ path / `--outdir DIR` to override the defaults.
 - `\institute{\inst{1} Affil one \and \inst{2} Affil two}` → affiliation block
 
 **From the body:**
-- `\section{}` and `\section*{}` commands become manuscript headings (labels preserved)
+- `\section{}`, `\section*{}`, `\subsection{}`, and `\subsection*{}` commands
+  become manuscript headings (labels preserved; level is unchanged)
 - Frame titles are dropped; frame content becomes prose paragraphs
 - `\section{Abstract}` and its frames are extracted into the abstract block
 - `\includegraphics` is wrapped in `\begin{figure}` with `\caption` and `\label`
@@ -332,6 +333,23 @@ Group logically related frames under one section:
   ...
 \end{frame}
 \begin{frame}{Model output}
+  ...
+\end{frame}
+```
+
+`\subsection{}` is also passed through (unchanged, at its own level) for a
+second level of structure within a section:
+
+```latex
+\section{Data}
+
+\subsection{Observations}
+\begin{frame}{...}
+  ...
+\end{frame}
+
+\subsection{Model output}
+\begin{frame}{...}
   ...
 \end{frame}
 ```

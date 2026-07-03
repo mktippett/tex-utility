@@ -64,8 +64,10 @@ Steps 4.1–4.4 are shared with the AMS converter via `beamer_common.py`:
 2. **Authors/affiliations**: `_parse_authors_affiliations_agu` (see §4.2).
 3. **Body preprocessing**: `preprocess_body` — strip Beamer theme commands, comments.
 4. **Event list**: `build_event_list(body, keep_bibliographystyle=False)` — captures
-   both `\section{...}` and `\section*{...}` as section events; AGU omits
-   `\bibliographystyle` passthroughs because the class loads `apacite` internally.
+   `\section{...}`, `\section*{...}`, `\subsection{...}`, and `\subsection*{...}`
+   as section events, passed through verbatim (no promotion/demotion between
+   levels); AGU omits `\bibliographystyle` passthroughs because the class loads
+   `apacite` internally.
 5. **End-matter sentinels**: `_extract_sentinel_block` run on original `src` for labels
    `OPENRESEARCH`, `COI`, `ACKS`; sentinel regions stripped from source before preprocessing;
    frame wrappers stripped; AGU headers injected; assembled as single event before Supplemental.
@@ -275,6 +277,7 @@ exclusions, and the 12 PU limit for GRL letters).
 | No Supplemental section | SI checklist counts stay 0; all three items commented out |
 | SI has figures but no `\fig{}`| Falls back to counting `\includegraphics{` in SI frame content |
 | SI has tables via `\begin{table}` only (no `tabular`) | Falls back to counting `\begin{table` if `\begin{tabular` count is 0 |
+| `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
 
 ---
 
@@ -308,3 +311,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-06-12 | `_build_si_header`: prepend `%% SI_BEGIN` sentinel as the first line of the returned block (before `\clearpage`), marking the SI boundary for `extract_main.py` | Yes |
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
 | 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |
+| 2026-07-03 | Shared: section-event regex extended from `\section` to `\(?:sub\)?section` in `build_event_list` and `extract_abstract`'s title match; `\subsection{...}`/`\subsection*{...}` outside a frame is now captured as a `section` event and passed through verbatim (previously matched no event type and was silently dropped) | Yes |

@@ -233,6 +233,10 @@ path / `--outdir DIR` to override the defaults.
   injected into the postamble (works regardless of whether they appear inside or outside a frame)
 - `\section{Supplemental…}` is reordered: bibliography + `\clearpage` are injected
   before it so references always precede SI content (mirrors AGU behavior)
+- `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation/
+  abstract block ignored, every figure/table caption ignored, SI ignored — AMS's
+  word-limit rule excludes all of these (captions in particular, unlike AGU, which
+  counts them)
 
 **AGU-specific:**
 - Author affiliations use `\affil{1}`, `\affil{2}`, … (number-based)
@@ -259,6 +263,9 @@ Things to fill in before sending to coauthors:
 **AMS:**
 - Corresponding author email in `\correspondingauthor{}`
 - Uncomment `\journal{jcli}` (or the relevant code) if submitting via the full AMS package
+- Run `texcount <output>_manuscript.tex` to get a word count; `%TC:ignore` markers are
+  already in place to exclude title/authors/affiliation/abstract, captions, and SI per
+  AMS's word-limit rule
 
 **AGU:**
 - Journal name in `\journalname{}` — default is `JGR: Atmospheres`

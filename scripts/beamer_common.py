@@ -239,8 +239,9 @@ def transform_content(content, figure_opts=None):
     Returns a string of LaTeX paragraphs / figure environments.
 
     figure_opts: dict passed to _restructure_figures to control figure format.
-      Keys: placement (str), centering (bool), noindent (bool), default_width (str|None)
-      Defaults produce AMS-style figures: [h], \\centering, no \\noindent.
+      Keys: placement (str), centering (bool), noindent (bool), default_width (str|None),
+      caption_tcignore (bool)
+      Defaults produce AMS-style figures: [h], \\centering, no \\noindent, caption counted.
     """
     # --- 1. Strip font size / selection commands first ----------------------
     content = _strip_font_size_cmds(content)
@@ -284,6 +285,7 @@ def transform_content(content, figure_opts=None):
         centering=opts.get('centering', True),
         noindent=opts.get('noindent', False),
         default_width=opts.get('default_width', None),
+        caption_tcignore=opts.get('caption_tcignore', False),
     )
 
     # --- 5. enumerate / itemize -> prose paragraphs -------------------------
@@ -312,7 +314,8 @@ def transform_content(content, figure_opts=None):
 
 
 def _restructure_figures(content, placement='h', centering=True,
-                          noindent=False, default_width=None):
+                          noindent=False, default_width=None,
+                          caption_tcignore=False):
     r"""
     Find \includegraphics blocks and wrap each group in a proper figure
     environment.  Skips \includegraphics that are already inside a
@@ -326,6 +329,9 @@ def _restructure_figures(content, placement='h', centering=True,
     centering: if True, add \centering inside the figure
     noindent: if True, prefix each \includegraphics with \noindent
     default_width: if set (e.g. r'\textwidth'), add width=... when no options present
+    caption_tcignore: if True, wrap the emitted \caption{} in flush-left
+      %TC:ignore / %TC:endignore markers so texcount excludes it (AMS rules
+      exclude captions from the word count; AGU counts them, so this defaults off)
     """
     # Convert any remaining \captionof{type}{...} -> \caption{...}
     content = _convert_captionof(content)
@@ -429,7 +435,12 @@ def _restructure_figures(content, placement='h', centering=True,
             prefix = '  \\noindent ' if noindent else '  '
             fig += prefix + g + '\n'
         if caption_cmd:
-            fig += '  ' + caption_cmd + '\n'
+            if caption_tcignore:
+                fig += '%TC:ignore\n'
+                fig += '  ' + caption_cmd + '\n'
+                fig += '%TC:endignore\n'
+            else:
+                fig += '  ' + caption_cmd + '\n'
         if label_cmd:
             fig += '  ' + label_cmd + '\n'
         fig += '\\end{figure}\n'

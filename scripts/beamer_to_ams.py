@@ -85,6 +85,7 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 
 \begin{{document}}
 
+%TC:ignore
 \title{{{title}}}
 
 {authors_block}
@@ -96,7 +97,16 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 }}
 
 \maketitle
+%TC:endignore
 """
+
+
+# AMS word-count rules exclude figure/table captions (unlike AGU, which counts
+# them) -- caption_tcignore=True wraps each generated \caption{} in
+# %TC:ignore/%TC:endignore so texcount -sum excludes it.
+_AMS_FIGURE_OPTS = {
+    'caption_tcignore': True,
+}
 
 
 def _build_postamble(bib_style, bib_file):
@@ -164,19 +174,23 @@ def convert(input_path, output_path):
         bib_lines.append(r'\bibliography{' + bib_file + '}')
         bib_lines.append(r'\clearpage')
         bib_lines.append(r'%% SI_BEGIN')
+        # SI is not counted against the AMS word limit -- open the ignore
+        # region here; extract_main.py closes/rebalances it when it later
+        # strips the SI back out for a main-only submission.
+        bib_lines.append(r'%TC:ignore')
         events.insert(supp_idx, (0, 'passthrough', '\n'.join(bib_lines)))
         events = [e for e in events
                   if not (e[1] == 'section' and 'supplement' in e[2].lower())]
-        postamble = r'\end{document}' + '\n'
+        postamble = '%TC:endignore\n' + r'\end{document}' + '\n'
     else:
         postamble = _build_postamble(bib_style, bib_file)
 
     if not events:
         print("Warning: no frames or sections found; writing body as-is.",
               file=sys.stderr)
-        manuscript_body = transform_content(body)
+        manuscript_body = transform_content(body, figure_opts=_AMS_FIGURE_OPTS)
     else:
-        manuscript_body = assemble_body(events)
+        manuscript_body = assemble_body(events, figure_opts=_AMS_FIGURE_OPTS)
 
     pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,

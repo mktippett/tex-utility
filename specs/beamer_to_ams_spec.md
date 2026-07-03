@@ -39,6 +39,36 @@ Output postamble:
 - **No supplemental section**: `\bibliographystyle{...}` + `\bibliography{...}` + `\end{document}` — built from raw source, not from passthrough events.
 - **Supplemental section present**: bib commands are injected into the event list before the supplemental content (see §4.5); postamble is `\end{document}` only.
 
+### `%TC:ignore` / `%TC:endignore` markers (texcount, 2026-07-02)
+
+AMS's word-limit rule excludes the title page, authors/affiliations,
+abstract, table text, figures, and references — but (unlike AGU's word-count
+rule) it also excludes **captions**. Verified against `texcount -sum`
+behavior directly (no file-level directive short of `%TC:ignore` wrapping
+reliably zeroes a region; `%TC:macro \caption 0` was tested and has no
+effect on `-sum`):
+
+- Front matter: `%TC:ignore` immediately after `\begin{document}`,
+  `%TC:endignore` immediately after `\maketitle` (`_build_preamble`) — wraps
+  title/authors/affiliation/abstract in one block.
+- Captions: every generated `\caption{...}` is individually wrapped in
+  `%TC:ignore`/`%TC:endignore` (`_restructure_figures`, gated by the
+  `caption_tcignore` option threaded through `figure_opts`; AMS sets
+  `_AMS_FIGURE_OPTS = {'caption_tcignore': True}`, AGU leaves it `False` so
+  its captions still count per AGU's rule).
+- Supplemental Information: when a supplemental section is present, the
+  injected bib block opens `%TC:ignore` right after `%% SI_BEGIN`; the
+  postamble closes it with `%TC:endignore` immediately before
+  `\end{document}`. This mirrors AGU's SI wrapping and lets `extract_main.py`'s
+  existing orphan-`%TC:ignore` rebalancing (see `specs/extract_main_spec.md`)
+  handle the split cleanly — validated end-to-end: `texcount -total -sum` on
+  the combined file and on the `extract_main.py`-split `main.tex` both report
+  the same Sum, zero "words outside text," and zero errors.
+- All markers are emitted flush-left on their own line (required by
+  texcount). `%TC:macro` directives were tried and rejected — they didn't
+  change `-sum`; only `%TC:ignore` wrapping (or a runtime `-sum=` flag,
+  not file-bakeable) works.
+
 ---
 
 ## 4. Algorithm
@@ -152,6 +182,10 @@ Applied to each frame's raw content string in order:
    - Look ahead for `\caption{...}` (balanced braces) and `\label{...}`;
      include both inside the figure environment.
    - Strip font size commands from caption text.
+   - When `caption_tcignore` is set in `figure_opts` (AMS only, via
+     `_AMS_FIGURE_OPTS`), wrap the emitted `\caption{...}` line in
+     `%TC:ignore`/`%TC:endignore` so `texcount` excludes it — see the
+     `%TC` markers subsection under §3.
 7. **List flattening** — `_flatten_lists`: `\begin{enumerate|itemize}...\end{...}`
    → prose paragraph; each `\item` becomes a sentence ending with `.`.
 8. **Block environments** — `\begin{block}{Title}` → `\textbf{Title}`.
@@ -233,3 +267,4 @@ metadata extraction from preamble.
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
 | 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |
 | 2026-07-02 | `_parse_authors_affiliations` (AMS): `\authors{}` join changed from `and`-between-every-author to the AMS template byline convention — comma after each name except the last, `and` before the last author only | Yes |
+| 2026-07-02 | Added `%TC:ignore`/`%TC:endignore` markers for AMS's word-limit rule: front matter (title/authors/affiliation/abstract), every caption (new `caption_tcignore` option on `_restructure_figures`/`figure_opts`, off by default so AGU is unaffected), and the SI region (opens after `%% SI_BEGIN`, closes before `\end{document}`) | Yes |

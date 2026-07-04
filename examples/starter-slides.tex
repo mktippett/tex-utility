@@ -1,0 +1,204 @@
+% starter-slides.tex -- barebones Beamer deck pre-tagged for the tex-utility
+% Beamer -> AMS/AGU manuscript converters (front-matter sections, endmatter
+% sentinels, %% EMAIL:). Mirrors the canonical template at
+% ~/claude/templates/research/tex/slides.tex (used by /new-project);
+% if the converter conventions change, update both.
+\documentclass[aspectratio=169,xcolor=dvipsnames]{beamer}
+\usetheme{SimpleDarkBlue}
+\setbeamertemplate{caption}[numbered]
+
+% \useoutertheme[subsection=false]{smoothbars}
+% ^^^ Comment out when deck exceeds ~50 frames (mini-frame dots overflow \paperwidth).
+%     Uncomment when the deck is trimmed to a manageable size.
+\useinnertheme{circles}
+\setbeamertemplate{enumerate items}[default]
+
+% --- Colors ---
+\setbeamercolor{section in head/foot}{bg=DarkBlue, fg=white}
+\setbeamercolor{section in head/foot shaded}{bg=LightBlue, fg=white}
+\setbeamercolor{frametitle}{bg=DarkBlue, fg=white}
+
+\usepackage{url}
+\usepackage[authoryear]{natbib}
+\bibpunct[; ]{(}{)}{;}{a}{,}{,}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{appendixnumberbeamer}
+
+% --- Figure macro: respects both width and height so caption never clips ---
+% Usage: \fig{../plots/01_example.pdf}
+\newcommand{\fig}[1]{%
+  \includegraphics[width=\linewidth,height=0.68\textheight,keepaspectratio]{#1}}
+
+% --- Appendix helper ---
+\newcommand{\startappendix}{
+  \setcounter{framenumber}{0}
+  \setbeamertemplate{footline}{}
+  \setbeamertemplate{footline}{
+    \hfill\insertframenumber\hspace{2ex}\vspace{2ex}
+  }
+}
+
+% ----------------------------------------------------------------------------------
+%  TITLE PAGE
+% ----------------------------------------------------------------------------------
+\title[Project Title]{Project Title}
+
+% Single author:
+\author[First Author]{First Author}
+\institute{Institution}
+
+% Multiple authors — uncomment and replace the two lines above:
+% \author[First Author]{First Author\inst{1} and Second Author\inst{2}}
+% \institute[]{\inst{1} Institution \and \inst{2} Second Institution}
+
+\date{\today}
+
+% --- Manuscript-conversion metadata (read by ~/claude/tex-utility converters) ---
+%% EMAIL: author@institution.edu
+% Target journal for AGU conversion (optional):
+%\journalname{Geophysical Research Letters}
+
+\setcounter{secnumdepth}{1}
+
+\AtBeginSection[]{
+  \setbeamercolor{background canvas}{bg=blue!50}
+  \begin{frame}
+    \centering
+    \Huge\textbf{\textcolor{white}{\thesection.\ \insertsectionhead}}
+  \end{frame}
+  \setbeamercolor{background canvas}{bg=white}
+}
+
+% \AtBeginSubsection[]{
+%   \setbeamercolor{background canvas}{bg=blue!50}
+%   \begin{frame}
+%     \centering
+%     \LARGE\textbf{\textcolor{white}{\thesection.\thesubsection\ \insertsubsectionhead}}
+%   \end{frame}
+%   \setbeamercolor{background canvas}{bg=white}
+% }
+
+% ----------------------------------------------------------------------------------
+%  SLIDES
+%  Convention:
+%    - One frame per figure; add bullet commentary directly on the frame if needed
+%    - Frame titles: no figure numbers, no citations in captions
+%    - Compile from inside tex/ so relative paths (../plots/...) resolve correctly
+%    - This deck converts to AMS/AGU manuscripts via ~/claude/tex-utility
+%      (starred front-matter sections, endmatter sentinels, %% EMAIL: —
+%      see that repo's README for the full tagging conventions)
+% ----------------------------------------------------------------------------------
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ---- Table of contents (optional) ----
+% \begin{frame}{Outline}
+%   \tableofcontents
+% \end{frame}
+
+% ---- Manuscript front matter ----
+% Starred sections: no divider slide, no numbering. The converters consume
+% these into the manuscript front matter (Key points and PLS are AGU-only;
+% AMS drops Key points and turns the PLS into a commented \statement).
+
+\section*{Abstract}
+\begin{frame}{Abstract}
+  Abstract text here.
+\end{frame}
+
+\section*{Key points}
+\begin{frame}{Key points}
+  \begin{itemize}
+    \item Key point 1 (AGU: complete sentence, under 140 characters).
+    \item Key point 2.
+    \item Key point 3.
+  \end{itemize}
+\end{frame}
+
+\section*{Plain Language Summary}
+\begin{frame}{Plain Language Summary}
+  Plain language summary here.
+\end{frame}
+
+\section{Introduction}
+
+\begin{frame}{Motivation}
+  \begin{itemize}
+    \item Point one.
+    \item Point two.
+  \end{itemize}
+\end{frame}
+
+\section{Data and Methods}
+
+\begin{frame}{Dataset}
+  \begin{itemize}
+    \item Describe the dataset here.
+  \end{itemize}
+\end{frame}
+
+\section{Results}
+
+\begin{frame}{Figure title}
+  \begin{minipage}[c]{0.55\linewidth}
+    \fig{../plots/01_example.pdf}
+  \end{minipage}\hfill
+  \begin{minipage}[c]{0.42\linewidth}
+    \begin{itemize}
+      \item Key result.
+      \item Another point.
+    \end{itemize}
+  \end{minipage}
+\end{frame}
+
+\section{Conclusions}
+
+\begin{frame}{Conclusions}
+  \begin{itemize}
+    \item Main finding.
+    \item Implication.
+  \end{itemize}
+\end{frame}
+
+% ---- Endmatter (sentinel-wrapped frames; converters emit \datastatement /
+%      \acknowledgments (AMS) or the Open Research / Acknowledgments
+%      sections (AGU)). For a conflict-of-interest statement, wrap a frame
+%      in %% COI_BEGIN / %% COI_END the same way; without it the converters
+%      emit a standard "no conflicts" stub. ----
+
+%% DATA_BEGIN
+\begin{frame}{Data Availability}
+  \begin{itemize}
+    \item Data archived at \url{https://...} (DOI: ...).
+    \item Analysis code at \url{https://github.com/...}.
+  \end{itemize}
+\end{frame}
+%% DATA_END
+
+%% ACKS_BEGIN
+\begin{frame}{Acknowledgments}
+  Supported by ... The authors thank ...
+\end{frame}
+%% ACKS_END
+
+\begin{frame}[allowframebreaks]{References}
+  \scriptsize
+  \bibliographystyle{plainnat}
+  \bibliography{references}
+\end{frame}
+
+% ---- Supplemental / appendix (optional) ----
+% \section{Supplemental}
+% \renewcommand\thefigure{S\arabic{figure}}
+% \setcounter{figure}{0}
+% \renewcommand\thetable{S\arabic{table}}
+% \setcounter{table}{0}
+
+\end{document}

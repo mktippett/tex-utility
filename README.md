@@ -301,7 +301,15 @@ Things to fill in before sending to coauthors:
 
 ## Tips for Beamer source formatting
 
-These habits make the converted manuscript cleaner.
+These habits make the converted manuscript cleaner. A barebones deck with
+all of them already in place is at `examples/starter-slides.tex`.
+
+> **Downstream dependent:** the `/new-project` scaffolding template at
+> `~/claude/templates/research/tex/slides.tex` is written to these
+> conventions (front-matter sections, endmatter sentinels, `%% EMAIL:`),
+> and `examples/starter-slides.tex` is its token-free mirror. If the
+> converter conventions change — sentinel names, section-title matching,
+> metadata directives — update both files.
 
 ### Metadata
 
@@ -532,6 +540,7 @@ tex-utility/
     test_main_si.tex        Test combined main+SI source (extract_main.py)
     test_main_si.aux        Matching .aux fixture (extract_main.py)
   examples/                 Example Beamer sources and converted outputs
+    starter-slides.tex      Barebones deck pre-tagged with all conversion hooks
   ams/
     ametsocV6.1.cls
     ametsocV6.bst

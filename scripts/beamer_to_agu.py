@@ -347,7 +347,7 @@ _AGU_CLOSE = r"""
 # Per-section stubs (fallback when sentinel not present in source).
 # Each stub includes the AGU header so it can be emitted standalone.
 _STUBS = {
-    'OPENRESEARCH': (
+    'DATA': (
         '\\section*{Open Research Section}\n'
         'Data and code availability statement here. Data cannot be listed as\n'
         "``available from the authors.''"
@@ -362,11 +362,12 @@ _STUBS = {
     ),
 }
 
-# AGU headers injected by the converter for each sentinel label.
+# AGU headers injected by the converter for each sentinel label
+# (canonical labels from beamer_common._SENTINEL_ALIASES).
 _SENTINEL_HEADERS = {
-    'OPENRESEARCH': r'\section*{Open Research Section}',
-    'COI':          r'\section*{Conflict of Interest}',
-    'ACKS':         r'\acknowledgments',
+    'DATA': r'\section*{Open Research Section}',
+    'COI':  r'\section*{Conflict of Interest}',
+    'ACKS': r'\acknowledgments',
 }
 
 
@@ -392,7 +393,7 @@ def convert(input_path, output_path, journal=None):
         _parse_authors_affiliations_agu(src)
 
     # --- Extract sentinel blocks from src BEFORE preprocessing ---------------
-    # Sentinel comment lines (%% AGU_*_BEGIN/END) are stripped by
+    # Sentinel comment lines (%% <LABEL>_BEGIN/END) are stripped by
     # preprocess_body, so detection must run on the original source.
     # The sentinel-wrapped content is removed from src before preprocessing
     # so those frames never enter the manuscript event list.

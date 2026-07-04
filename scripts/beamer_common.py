@@ -42,6 +42,15 @@ _AUTHOR_SEP_RE = re.compile(r'\s*\\and\b\s*|\s*,\s*and\s+|\s*,\s*|\s+and\s+')
 # fallback patterns ("Supplemental", "Supplement", "Supporting Information").
 _SI_SECTION_RE = re.compile(r'supplement|supporting\s+information', re.IGNORECASE)
 
+# Endmatter sentinel names: canonical generic name -> accepted spellings.
+# The AGU_* forms are the original (AGU-first) names, supported indefinitely
+# so existing decks keep converting; new decks should use the generic names.
+_SENTINEL_ALIASES = {
+    'DATA': ('DATA', 'AGU_OPENRESEARCH'),
+    'COI':  ('COI',  'AGU_COI'),
+    'ACKS': ('ACKS', 'AGU_ACKS'),
+}
+
 # Curated allowlist for extract_passthrough_packages: packages that are safe
 # and useful in both AMS and AGU manuscript classes.  Excludes packages already
 # hardcoded in the converter preamble templates (graphicx, natbib, caption,
@@ -723,8 +732,9 @@ def is_si_section(event_content):
 
 
 def extract_email(src):
-    """Return email from the %% AGU_EMAIL: address sentinel, or placeholder."""
-    m = re.search(r'^%%\s*AGU_EMAIL:\s*(.+)$', src, re.MULTILINE)
+    """Return email from the %% EMAIL: address sentinel (legacy alias
+    %% AGU_EMAIL: also accepted), or placeholder."""
+    m = re.search(r'^%%\s*(?:AGU_)?EMAIL:\s*(.+)$', src, re.MULTILINE)
     return m.group(1).strip() if m else 'email@institution.edu'
 
 
@@ -732,15 +742,16 @@ def extract_sentinel_block(body, label):
     r"""
     Return (start, end, inner_text) or None.
 
-    Matches line-anchored sentinels:
-        %% AGU_<LABEL>_BEGIN
+    label is a canonical name from _SENTINEL_ALIASES (DATA, COI, ACKS).
+    Matches line-anchored sentinels under any accepted spelling:
+        %% <NAME>_BEGIN
         ...inner_text...
-        %% AGU_<LABEL>_END
-
-    The AGU_ prefix is historical; both converters read the same sentinels.
+        %% <NAME>_END
+    e.g. %% DATA_BEGIN or the legacy %% AGU_OPENRESEARCH_BEGIN.
     """
-    begin_pat = re.compile(r'^%+\s*AGU_' + label + r'_BEGIN\s*$', re.MULTILINE)
-    end_pat   = re.compile(r'^%+\s*AGU_' + label + r'_END\s*$',   re.MULTILINE)
+    names = '|'.join(_SENTINEL_ALIASES[label])
+    begin_pat = re.compile(r'^%+\s*(?:' + names + r')_BEGIN\s*$', re.MULTILINE)
+    end_pat   = re.compile(r'^%+\s*(?:' + names + r')_END\s*$',   re.MULTILINE)
     m_begin = begin_pat.search(body)
     m_end   = end_pat.search(body)
     if m_begin and m_end and m_begin.end() < m_end.start():

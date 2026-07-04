@@ -33,8 +33,9 @@ Key preamble commands parsed:
 | `<stem>_manuscript.tex` | AMS manuscript skeleton | UTF-8 LaTeX |
 
 Output preamble includes: `\title{}`, `\authors{}` (corresponding-author
-email from the `%% AGU_EMAIL:` sentinel, shared with the AGU converter;
-placeholder if absent), `\affiliation{}`, `\abstract{}` (populated from
+email from the `%% EMAIL:` sentinel, shared with the AGU converter; legacy
+`%% AGU_EMAIL:` accepted; placeholder if absent), `\affiliation{}`,
+`\abstract{}` (populated from
 `\section{Abstract}` frame content), and — after `\maketitle` — a commented
 `%\statement` block (see §4.8).
 
@@ -236,9 +237,11 @@ After abstract extraction:
 
 ### 4.9 Endmatter from sentinels (`_build_endmatter`)
 
-The AMS converter reads the **same** `%% AGU_<LABEL>_BEGIN`/`_END` comment
+The AMS converter reads the **same** `%% <LABEL>_BEGIN`/`_END` comment
 sentinels as the AGU converter (`extract_sentinel_block`, shared in
-`beamer_common.py`; the `AGU_` prefix is historical). Sentinel blocks are
+`beamer_common.py`; canonical labels `DATA`/`COI`/`ACKS`, with the legacy
+AGU-first spellings `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS` accepted
+indefinitely via `_SENTINEL_ALIASES`). Sentinel blocks are
 extracted from the raw source before `preprocess_body` (which strips comment
 lines) and their regions removed so the wrapped frames never enter the event
 list. Frame wrappers are stripped (`strip_frame_wrappers`), `\fig{}` expanded,
@@ -250,7 +253,7 @@ AMS mapping (vs. AGU's three `\section*{}` headers):
 |----------|-----------|
 | `ACKS` | `\acknowledgments` paragraph |
 | `COI` | appended to the acknowledgments paragraph (AMS has no COI section) |
-| `OPENRESEARCH` | `\datastatement` — AMS's **required** data availability statement |
+| `DATA` | `\datastatement` — AMS's **required** data availability statement |
 
 Missing sentinels fall back to stubs (`_ENDMATTER_STUBS`). The block is
 wrapped in `%TC:ignore`/`%TC:endignore` and emitted immediately before the
@@ -281,8 +284,8 @@ bibliography in both postamble variants (§4.5).
 | `\bibliographystyle`/`\bibliography` inside a frame | Stripped by `transform_content`; postamble uses values extracted from raw source, so inside-frame location is harmless |
 | `\bibliographystyle`/`\bibliography` outside a frame | Same: extracted from raw source, not from passthrough events |
 | `\section{Supplemental}` (or `Supplement…`, `Supporting Information…`) present | Endmatter + bibliography injected before it as a passthrough event (`is_si_section` shared matcher); supplemental section marker stripped; `\clearpage` separates references from SI content; postamble = `\end{document}` only |
-| No `%% AGU_*` sentinels in source | Endmatter emitted with stub placeholders (`_ENDMATTER_STUBS`) |
-| No `%% AGU_EMAIL:` sentinel | `\correspondingauthor{}` uses `email@institution.edu` placeholder |
+| No endmatter sentinels in source (either spelling) | Endmatter emitted with stub placeholders (`_ENDMATTER_STUBS`) |
+| No `%% EMAIL:` (or legacy `%% AGU_EMAIL:`) sentinel | `\correspondingauthor{}` uses `email@institution.edu` placeholder |
 | No Key points / PLS sections | Key points: nothing to drop; `%\statement` block emitted with placeholder text |
 | No `\bibliography{}` in source | `_extract_bib_file` returns `'references'`; `_extract_bib_style` returns `None` (style line omitted) |
 | No `\institute{}` in source | Falls back to per-author `Department, Institution, City, State` placeholder |
@@ -335,3 +338,4 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-04 | `%% AGU_EMAIL:` sentinel now honored (shared `extract_email` in `beamer_common.py`); previously AMS always emitted the placeholder | Yes |
 | 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive); AMS previously matched `supplement`, AGU `supplemental` — a `\section{Supplement}` deck reordered in AMS but not AGU | Yes |
 | 2026-07-04 | Shared: `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` moved from `beamer_to_agu.py` to `beamer_common.py` (KP extractor now returns `[]` and PLS extractor `None` when absent; AGU applies its own defaults) | Yes |
+| 2026-07-04 | Shared: sentinel names made generic — canonical `DATA`/`COI`/`ACKS` and `%% EMAIL:` with legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS`/`%% AGU_EMAIL:` accepted indefinitely (`_SENTINEL_ALIASES` in `beamer_common.py`); internal label `OPENRESEARCH` renamed `DATA`. Output byte-identical for legacy decks (verified against pre-change code) | Yes |

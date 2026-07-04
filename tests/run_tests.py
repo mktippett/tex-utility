@@ -293,6 +293,33 @@ _FIGURE_REWRITE_SAMPLE = r"""
 """
 
 
+def check_sentinel_aliases_unit():
+    """Both sentinel spellings (generic canonical + legacy AGU_*) must be
+    accepted.  The end-to-end runs cover generic DATA/EMAIL and legacy
+    COI/ACKS; this covers the remaining combinations."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from beamer_common import extract_sentinel_block, extract_email
+
+    cases = [
+        ('DATA', '%% DATA_BEGIN\nX\n%% DATA_END\n'),
+        ('DATA', '%% AGU_OPENRESEARCH_BEGIN\nX\n%% AGU_OPENRESEARCH_END\n'),
+        ('COI',  '%% COI_BEGIN\nX\n%% COI_END\n'),
+        ('COI',  '%% AGU_COI_BEGIN\nX\n%% AGU_COI_END\n'),
+        ('ACKS', '%% ACKS_BEGIN\nX\n%% ACKS_END\n'),
+        ('ACKS', '%% AGU_ACKS_BEGIN\nX\n%% AGU_ACKS_END\n'),
+    ]
+    for label, src in cases:
+        block = extract_sentinel_block(src, label)
+        if block is None or 'X' not in block[2]:
+            _failures.append(f'  FAIL  sentinel alias: {label} not extracted '
+                             f'from {src.splitlines()[0]!r}')
+
+    for src in ('%% EMAIL: a@b.edu\n', '%% AGU_EMAIL: a@b.edu\n'):
+        if extract_email(src) != 'a@b.edu':
+            _failures.append(f'  FAIL  email alias: not extracted from '
+                             f'{src.strip()!r}')
+
+
 def check_figure_rewrite_unit():
     sys.path.insert(0, str(SCRIPTS_DIR))
     import extract_main as em
@@ -382,6 +409,18 @@ def main():
             total_fail += len(new_failures)
         else:
             print('  all checks passed')
+
+    # --- sentinel spelling aliases (unit test) ---
+    print('\n=== sentinel aliases (unit) ===')
+    before = len(_failures)
+    check_sentinel_aliases_unit()
+    new_failures = _failures[before:]
+    if new_failures:
+        for msg in new_failures:
+            print(msg)
+        total_fail += len(new_failures)
+    else:
+        print('  all checks passed')
 
     # --- extract_main.py: \includegraphics rewrite (unit test) ---
     print('\n=== extract_main figure rewrite (unit) ===')

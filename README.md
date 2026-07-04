@@ -229,10 +229,10 @@ path / `--outdir DIR` to override the defaults.
   except the last, and `and` before the last author only (not between every
   pair) — e.g. `Name One,\aff{a} Name Two,\aff{b} and Name Three\aff{c}`
 - `\abstract{...}` command form
-- Corresponding-author email filled from the `%% AGU_EMAIL:` sentinel
+- Corresponding-author email filled from the `%% EMAIL:` sentinel
   (same sentinel as AGU; placeholder if absent)
 - End-matter extracted from the same comment-sentinel-wrapped frames as AGU
-  (see *End-matter sentinels* below): `OPENRESEARCH` → `\datastatement`
+  (see *End-matter sentinels* below): `DATA` → `\datastatement`
   (AMS's required data availability statement), `ACKS` → `\acknowledgments`;
   `COI` has no AMS section of its own, so its text is appended to the
   acknowledgments paragraph. Placed before the bibliography; stubs when
@@ -275,7 +275,7 @@ path / `--outdir DIR` to override the defaults.
 Things to fill in before sending to coauthors:
 
 **AMS:**
-- Corresponding author email — add `%% AGU_EMAIL: you@institution.edu` anywhere in
+- Corresponding author email — add `%% EMAIL: you@institution.edu` anywhere in
   the Beamer preamble (same sentinel as AGU); placeholder is used if absent
 - If sentinels were used: review the extracted `\acknowledgments` (COI text is
   appended to it) and `\datastatement`; otherwise fill in their stub placeholders
@@ -288,7 +288,7 @@ Things to fill in before sending to coauthors:
 
 **AGU:**
 - Journal name in `\journalname{}` — default is `JGR: Atmospheres`
-- Corresponding author email — add `%% AGU_EMAIL: you@institution.edu` anywhere in
+- Corresponding author email — add `%% EMAIL: you@institution.edu` anywhere in
   the Beamer preamble; the converter inserts it into `\correspondingauthor{}{}` automatically
 - Three key points in `\begin{keypoints}` (max 140 characters each)
 - Plain Language Summary
@@ -451,40 +451,42 @@ raw source text, so their location doesn't matter.
 
 ### End-matter sentinels
 
-Both converters extract Open Research, Conflict of Interest, and
-Acknowledgments from normal Beamer frames marked with comment sentinels
-(the `AGU_` prefix is historical — the AMS converter reads the same markers).
+Both converters extract data availability, Conflict of Interest, and
+Acknowledgments from normal Beamer frames marked with comment sentinels.
 The frames compile and render as slides; the comment lines are invisible
 to Beamer (no nav-bar entries, no `\section*` clutter).
 
 ```latex
-%% AGU_OPENRESEARCH_BEGIN
-\begin{frame}{Open Research}
+%% DATA_BEGIN
+\begin{frame}{Data Availability}
   \begin{itemize}
     \item Data archived at \url{https://zenodo.org/...} (DOI: ...).
     \item Code at \url{https://github.com/...}.
   \end{itemize}
 \end{frame}
-%% AGU_OPENRESEARCH_END
+%% DATA_END
 
-%% AGU_COI_BEGIN
+%% COI_BEGIN
 \begin{frame}{Conflict of Interest}
   The authors declare no conflicts of interest.
 \end{frame}
-%% AGU_COI_END
+%% COI_END
 
-%% AGU_ACKS_BEGIN
+%% ACKS_BEGIN
 \begin{frame}{Acknowledgments}
   Supported by NSF grant AGS-0000000. We thank ...
 \end{frame}
-%% AGU_ACKS_END
+%% ACKS_END
 ```
 
 - The converter strips the `\begin{frame}{...}` / `\end{frame}` wrappers and
   injects the journal's header. AGU: `\section*{Open Research Section}`,
   `\section*{Conflict of Interest}`, `\acknowledgments`. AMS:
-  `\datastatement` (from `OPENRESEARCH`), `\acknowledgments` (from `ACKS`,
+  `\datastatement` (from `DATA`), `\acknowledgments` (from `ACKS`,
   with the `COI` text appended — AMS has no COI section).
+- Legacy spellings from when the sentinels were AGU-only are accepted
+  indefinitely: `AGU_OPENRESEARCH` (= `DATA`), `AGU_COI`, `AGU_ACKS`, and
+  `%% AGU_EMAIL:` (= `%% EMAIL:`). Existing decks need no changes.
 - `\bibliography{...}` stays in the References frame as usual; the converter
   appends it after the acknowledgments in the manuscript.
 - Any missing sentinel block falls back to a placeholder stub.

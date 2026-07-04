@@ -69,8 +69,9 @@ Steps 4.1–4.4 are shared with the AMS converter via `beamer_common.py`:
    levels); AGU omits `\bibliographystyle` passthroughs because the class loads
    `apacite` internally.
 5. **End-matter sentinels**: `extract_sentinel_block` (shared, `beamer_common.py`;
-   the AMS converter reads the same sentinels) run on original `src` for labels
-   `OPENRESEARCH`, `COI`, `ACKS`; sentinel regions stripped from source before preprocessing;
+   the AMS converter reads the same sentinels) run on original `src` for canonical labels
+   `DATA`, `COI`, `ACKS` (legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS` spellings
+   accepted via `_SENTINEL_ALIASES`); sentinel regions stripped from source before preprocessing;
    frame wrappers stripped; AGU headers injected; assembled as single event before Supplemental.
 6. **Abstract**: `extract_abstract` — consumes `\section{Abstract}` and following frames.
 7. **Plain Language Summary**: `extract_plain_language_summary` (shared) — consumes
@@ -169,28 +170,30 @@ marked in the Beamer source using comment sentinels that wrap normal Beamer
 frames. The frames compile and render as slides; the sentinels are invisible
 to Beamer (pure `%` comments).
 
-**Convention in the Beamer source:**
+**Convention in the Beamer source** (canonical spellings; the legacy
+AGU-first forms `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS` are accepted
+indefinitely via `_SENTINEL_ALIASES` in `beamer_common.py`):
 
 ```latex
-%% AGU_OPENRESEARCH_BEGIN
-\begin{frame}{Open Research}
+%% DATA_BEGIN
+\begin{frame}{Data Availability}
   \begin{itemize}
     \item Data archived at \url{https://zenodo.org/...}
   \end{itemize}
 \end{frame}
-%% AGU_OPENRESEARCH_END
+%% DATA_END
 
-%% AGU_COI_BEGIN
+%% COI_BEGIN
 \begin{frame}{Conflict of Interest}
   The authors declare no conflicts of interest.
 \end{frame}
-%% AGU_COI_END
+%% COI_END
 
-%% AGU_ACKS_BEGIN
+%% ACKS_BEGIN
 \begin{frame}{Acknowledgments}
   Supported by NSF grant AGS-0000000.
 \end{frame}
-%% AGU_ACKS_END
+%% ACKS_END
 ```
 
 **Extraction pipeline** (`extract_sentinel_block`, `strip_frame_wrappers` —
@@ -205,7 +208,7 @@ with its own header mapping, see `specs/beamer_to_ams_spec.md` §4.9):
    `\begin{frame}{...}` / `\end{frame}` wrappers (the frame title is discarded;
    the AGU section header replaces it). `transform_content` processes the body.
 4. The converter **injects the AGU section header** from `_SENTINEL_HEADERS`:
-   - `OPENRESEARCH` → `\section*{Open Research Section}`
+   - `DATA` → `\section*{Open Research Section}`
    - `COI` → `\section*{Conflict of Interest}`
    - `ACKS` → `\acknowledgments`
 5. Missing sentinel blocks fall back to the per-section stub in `_STUBS`.
@@ -263,7 +266,7 @@ exclusions, and the 12 PU limit for GRL letters).
 
 | Situation | Handling |
 |-----------|----------| 
-| `%% AGU_EMAIL: addr` absent | Falls back to `email@institution.edu` placeholder |
+| `%% EMAIL: addr` (or legacy `%% AGU_EMAIL:`) absent | Falls back to `email@institution.edu` placeholder |
 | `\citet[][post]{key}` (empty prenote) | `_citet_two_args` detects empty pre, emits `\citeA[post]{key}` (no `<>`) |
 | `\bibliographystyle{...}` in source | Dropped from passthrough events (`keep_bibliographystyle=False`) |
 | `\includegraphics[width=X]` already has options | `default_width` not applied; existing options preserved |
@@ -322,3 +325,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-07-03 | Shared: section-event regex extended from `\section` to `\(?:sub\)?section` in `build_event_list` and `extract_abstract`'s title match; `\subsection{...}`/`\subsection*{...}` outside a frame is now captured as a `section` event and passed through verbatim (previously matched no event type and was silently dropped) | Yes |
 | 2026-07-04 | Shared: `_extract_sentinel_block`, `_strip_frame_wrappers`, `_extract_email`, `_extract_key_points`, `_extract_plain_language_summary` moved to `beamer_common.py` as `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` (now also used by the AMS converter). Return-value change: KP extractor returns `[]` and PLS extractor `None` when the section is absent; AGU applies `_KP_DEFAULTS`/placeholder itself. AGU output byte-identical before/after (verified on tests/test_input.tex) | Yes |
 | 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive; previously AGU matched only `supplemental` — a `\section{Supplement}` or `\section{Supporting Information}` deck was silently not reordered) | Yes |
+| 2026-07-04 | Shared: sentinel names made generic — canonical `DATA`/`COI`/`ACKS` and `%% EMAIL:` with legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS`/`%% AGU_EMAIL:` accepted indefinitely (`_SENTINEL_ALIASES` in `beamer_common.py`); `_STUBS`/`_SENTINEL_HEADERS` keys renamed `OPENRESEARCH` → `DATA`. Output byte-identical for legacy decks | Yes |

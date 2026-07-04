@@ -141,16 +141,18 @@ _AMS_FIGURE_OPTS = {
     'caption_tcignore': True,
 }
 
-# Endmatter sentinel labels shared with beamer_to_agu.py (%% AGU_<LABEL>_BEGIN/
-# END around normal Beamer frames).  AMS mapping: OPENRESEARCH -> the required
-# \datastatement, ACKS -> \acknowledgments; COI has no AMS section of its own,
-# so its text is appended to the acknowledgments paragraph.
+# Endmatter sentinel labels shared with beamer_to_agu.py (%% <LABEL>_BEGIN/END
+# around normal Beamer frames; canonical labels from
+# beamer_common._SENTINEL_ALIASES, legacy AGU_* spellings accepted).
+# AMS mapping: DATA -> the required \datastatement, ACKS -> \acknowledgments;
+# COI has no AMS section of its own, so its text is appended to the
+# acknowledgments paragraph.
 _ENDMATTER_STUBS = {
     'ACKS': 'Enter acknowledgments here.',
-    'OPENRESEARCH': ('Data availability statement here: where the data '
-                     'supporting the findings can be accessed (repository '
-                     'and DOI/URL). If access is restricted, state that '
-                     'here.'),
+    'DATA': ('Data availability statement here: where the data '
+             'supporting the findings can be accessed (repository '
+             'and DOI/URL). If access is restricted, state that '
+             'here.'),
 }
 
 
@@ -175,8 +177,8 @@ def _build_endmatter(sentinel_inner):
     coi = _sentinel_content(sentinel_inner, 'COI')
     if coi:
         acks += '\n\n' + coi
-    data = (_sentinel_content(sentinel_inner, 'OPENRESEARCH')
-            or _ENDMATTER_STUBS['OPENRESEARCH'])
+    data = (_sentinel_content(sentinel_inner, 'DATA')
+            or _ENDMATTER_STUBS['DATA'])
     return '\n'.join([
         '%TC:ignore',
         r'\acknowledgments',
@@ -207,13 +209,13 @@ def convert(input_path, output_path):
     title_text = _extract_preamble_arg(src, 'title') or 'TITLE'
 
     # --- Extract endmatter sentinel blocks BEFORE preprocessing --------------
-    # Same %% AGU_*_BEGIN/END convention as beamer_to_agu.py: the sentinel
+    # Same %% <LABEL>_BEGIN/END convention as beamer_to_agu.py: the sentinel
     # comment lines are stripped by preprocess_body, so detection must run on
     # the original source, and the wrapped frames are removed from src so
     # they never enter the manuscript event list.
     sentinel_inner = {}   # label -> raw inner text (frame + content)
     sentinel_regions = [] # (start, end) in src
-    for label in ('OPENRESEARCH', 'COI', 'ACKS'):
+    for label in ('DATA', 'COI', 'ACKS'):
         block = extract_sentinel_block(src, label)
         if block:
             start, end, inner = block

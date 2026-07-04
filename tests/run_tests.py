@@ -148,6 +148,7 @@ def check_manuscript(text):
     check('affiliation aff{a} text',   text, r'\\aff\{a\}\{Department of Atmospheric Science')
     check('affiliation aff{b} text',   text, r'\\aff\{b\}\{Institute of Oceanography')
     check('corresponding author',      text, r'\\correspondingauthor\{')
+    check('email sentinel',            text, r'author@university\.edu')
     check('amsmath pkg',               text, r'\\usepackage\{amsmath\}')
     check('bm pkg',                    text, r'\\usepackage\{bm\}')
     check('booktabs pkg',              text, r'\\usepackage\{booktabs\}')
@@ -158,6 +159,28 @@ def check_manuscript(text):
     # --- abstract ---
     check('abstract command',          text, r'\\abstract\{')
     check('abstract text',             text, r'Beamer-to-manuscript conversion')
+
+    # --- commented \statement from Plain Language Summary ---
+    check('statement commented',       text, r'^%\\statement', flags=re.MULTILINE)
+    check('statement PLS text',        text, r'^%  Scientific papers often begin',
+          flags=re.MULTILINE)
+
+    # --- AGU-only front matter consumed, not leaked into the body ---
+    check('no Key points section',     text, r'\\section\*?\{Key points\}', present=False)
+    check('no PLS section',            text, r'\\section\*?\{Plain Language', present=False)
+
+    # --- endmatter from sentinels ---
+    check('acknowledgments cmd',       text, r'^\\acknowledgments', flags=re.MULTILINE)
+    check('acks content',              text, r'NSF grant AGS-0000000')
+    check('COI folded into acks',      text, r'declare no conflicts of interest')
+    check('datastatement cmd',         text, r'^\\datastatement', flags=re.MULTILINE)
+    check('datastatement content',     text, r'zenodo\.org/record/test')
+    # endmatter must precede the bibliography
+    ds_pos  = text.find(r'\datastatement')
+    bib_pos = text.find(r'\bibliography{refs}')
+    if ds_pos == -1 or bib_pos == -1 or not (ds_pos < bib_pos):
+        _failures.append('  FAIL  endmatter-before-bib: \\datastatement must '
+                         'precede \\bibliography{}')
 
     # --- body ---
     check('intro section',             text, r'\\section\{Introduction\}')

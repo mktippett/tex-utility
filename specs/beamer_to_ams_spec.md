@@ -32,12 +32,16 @@ Key preamble commands parsed:
 |------|----------|--------|
 | `<stem>_manuscript.tex` | AMS manuscript skeleton | UTF-8 LaTeX |
 
-Output preamble includes: `\title{}`, `\authors{}`, `\affiliation{}`,
-`\abstract{}` (populated from `\section{Abstract}` frame content).
+Output preamble includes: `\title{}`, `\authors{}` (corresponding-author
+email from the `%% AGU_EMAIL:` sentinel, shared with the AGU converter;
+placeholder if absent), `\affiliation{}`, `\abstract{}` (populated from
+`\section{Abstract}` frame content), and — after `\maketitle` — a commented
+`%\statement` block (see §4.8).
 
-Output postamble:
-- **No supplemental section**: `\bibliographystyle{...}` + `\bibliography{...}` + `\end{document}` — built from raw source, not from passthrough events.
-- **Supplemental section present**: bib commands are injected into the event list before the supplemental content (see §4.5); postamble is `\end{document}` only.
+Endmatter (`\acknowledgments` + `\datastatement`, see §4.9) is emitted
+immediately before the bibliography in both postamble variants:
+- **No supplemental section**: endmatter + `\bibliographystyle{...}` + `\bibliography{...}` + `\end{document}` — bib commands built from raw source, not from passthrough events.
+- **Supplemental section present**: endmatter + bib commands are injected into the event list before the supplemental content (see §4.5); postamble is `\end{document}` only.
 
 ### `%TC:ignore` / `%TC:endignore` markers (texcount, 2026-07-02)
 
@@ -56,6 +60,9 @@ effect on `-sum`):
   `caption_tcignore` option threaded through `figure_opts`; AMS sets
   `_AMS_FIGURE_OPTS = {'caption_tcignore': True}`, AGU leaves it `False` so
   its captions still count per AGU's rule).
+- Endmatter: the `\acknowledgments` + `\datastatement` block is wrapped in
+  its own `%TC:ignore`/`%TC:endignore` pair — AMS's word-limit rule excludes
+  acknowledgments and the data availability statement.
 - Supplemental Information: when a supplemental section is present, the
   injected bib block opens `%TC:ignore` right after `%% SI_BEGIN`; the
   postamble closes it with `%TC:endignore` immediately before
@@ -133,8 +140,11 @@ scan the **full raw source** with `re.search`, so they find `\bibliography{...}`
 `\bibliographystyle{...}` regardless of whether those commands appear inside or
 outside a Beamer frame.
 
-After extracting the abstract, the event list is scanned for a section whose title
-contains `supplement` (case-insensitive):
+After extracting the abstract (and consuming Key points / PLS, §4.8), the
+event list is scanned for a section matching `is_si_section` (shared matcher
+in `beamer_common.py`: `supplement` or `supporting information`,
+case-insensitive — one matcher for both converters, consistent with
+`extract_main.py`'s fallback patterns):
 
 - **No supplemental section**: `_build_postamble(bib_style, bib_file)` emits:
   ```latex
@@ -147,6 +157,13 @@ contains `supplement` (case-insensitive):
      removed (prevents duplication).
   2. A new passthrough event is inserted immediately before the supplemental section:
      ```latex
+     %TC:ignore
+     \acknowledgments
+     ...
+     \datastatement
+     ...
+     %TC:endignore
+
      \bibliographystyle{<style>}   % if present
      \bibliography{<file>}
      \clearpage
@@ -199,6 +216,46 @@ depth; returns `(content, end_index)`.  Used throughout for: frame title
 extraction, `\captionof` conversion, caption lookahead, `\frametitle` extraction,
 metadata extraction from preamble.
 
+### 4.8 AGU-oriented front matter: Key points dropped, PLS → `%\statement`
+
+Slides written for the dual AMS/AGU pipeline carry `\section*{Key points}`
+and `\section*{Plain Language Summary}` sections, which have no AMS slot.
+After abstract extraction:
+
+1. `extract_key_points(events)` (shared, `beamer_common.py`) consumes the
+   Key points section and its frames; the items are **discarded**.
+2. `extract_plain_language_summary(events)` (shared) consumes the PLS
+   section and its frames, returning the transformed text or `None`.
+3. `_build_statement_block(pls_text)` emits a fully commented `%\statement`
+   block after `\maketitle`, mirroring the optional significance-statement
+   stub in the official `templateV6.1.tex` (all AMS journals except BAMS;
+   max 120 words). The PLS text is included as commented lines when found —
+   emitted commented-out rather than live because a PLS is typically longer
+   than 120 words; the author trims, then uncomments. Placeholder line when
+   no PLS is present.
+
+### 4.9 Endmatter from sentinels (`_build_endmatter`)
+
+The AMS converter reads the **same** `%% AGU_<LABEL>_BEGIN`/`_END` comment
+sentinels as the AGU converter (`extract_sentinel_block`, shared in
+`beamer_common.py`; the `AGU_` prefix is historical). Sentinel blocks are
+extracted from the raw source before `preprocess_body` (which strips comment
+lines) and their regions removed so the wrapped frames never enter the event
+list. Frame wrappers are stripped (`strip_frame_wrappers`), `\fig{}` expanded,
+and content transformed with `_AMS_FIGURE_OPTS`.
+
+AMS mapping (vs. AGU's three `\section*{}` headers):
+
+| Sentinel | AMS output |
+|----------|-----------|
+| `ACKS` | `\acknowledgments` paragraph |
+| `COI` | appended to the acknowledgments paragraph (AMS has no COI section) |
+| `OPENRESEARCH` | `\datastatement` — AMS's **required** data availability statement |
+
+Missing sentinels fall back to stubs (`_ENDMATTER_STUBS`). The block is
+wrapped in `%TC:ignore`/`%TC:endignore` and emitted immediately before the
+bibliography in both postamble variants (§4.5).
+
 ---
 
 ## 5. Constants & Scientific Rationale
@@ -223,7 +280,10 @@ metadata extraction from preamble.
 | `\includegraphics` already in `\begin{figure}` | `_restructure_figures` detects existing figure env and passes it through unchanged |
 | `\bibliographystyle`/`\bibliography` inside a frame | Stripped by `transform_content`; postamble uses values extracted from raw source, so inside-frame location is harmless |
 | `\bibliographystyle`/`\bibliography` outside a frame | Same: extracted from raw source, not from passthrough events |
-| `\section{Supplemental}` (or `Supplementary…`) present | Bibliography injected before it as a passthrough event; supplemental section marker stripped; `\clearpage` separates references from SI content; postamble = `\end{document}` only |
+| `\section{Supplemental}` (or `Supplement…`, `Supporting Information…`) present | Endmatter + bibliography injected before it as a passthrough event (`is_si_section` shared matcher); supplemental section marker stripped; `\clearpage` separates references from SI content; postamble = `\end{document}` only |
+| No `%% AGU_*` sentinels in source | Endmatter emitted with stub placeholders (`_ENDMATTER_STUBS`) |
+| No `%% AGU_EMAIL:` sentinel | `\correspondingauthor{}` uses `email@institution.edu` placeholder |
+| No Key points / PLS sections | Key points: nothing to drop; `%\statement` block emitted with placeholder text |
 | No `\bibliography{}` in source | `_extract_bib_file` returns `'references'`; `_extract_bib_style` returns `None` (style line omitted) |
 | No `\institute{}` in source | Falls back to per-author `Department, Institution, City, State` placeholder |
 | `\author` without `\inst{}` markers | Authors assigned aff letters sequentially; single `\affiliation` placeholder |
@@ -270,3 +330,8 @@ metadata extraction from preamble.
 | 2026-07-03 | Shared: section-event regex extended from `\section` to `\(?:sub\)?section` in `build_event_list` and `extract_abstract`'s title match; `\subsection{...}`/`\subsection*{...}` outside a frame is now captured as a `section` event and passed through verbatim (previously matched no event type and was silently dropped) | Yes |
 | 2026-07-02 | `_parse_authors_affiliations` (AMS): `\authors{}` join changed from `and`-between-every-author to the AMS template byline convention — comma after each name except the last, `and` before the last author only | Yes |
 | 2026-07-02 | Added `%TC:ignore`/`%TC:endignore` markers for AMS's word-limit rule: front matter (title/authors/affiliation/abstract), every caption (new `caption_tcignore` option on `_restructure_figures`/`figure_opts`, off by default so AGU is unaffected), and the SI region (opens after `%% SI_BEGIN`, closes before `\end{document}`) | Yes |
+| 2026-07-04 | Endmatter added (template-parity audit): AMS converter now reads the same `%% AGU_*` sentinels as AGU — `OPENRESEARCH` → `\datastatement` (required by AMS), `ACKS` → `\acknowledgments`, `COI` folded into acknowledgments; `%TC:ignore`-wrapped, before the bibliography; stubs when absent. Previously sentinel frames leaked into the body as bare unlabeled paragraphs | Yes |
+| 2026-07-04 | Key points consumed and dropped; Plain Language Summary consumed and emitted as commented `%\statement` block after `\maketitle` (templateV6.1.tex's optional significance statement). Previously both leaked into the body as `\section*{}` sections | Yes |
+| 2026-07-04 | `%% AGU_EMAIL:` sentinel now honored (shared `extract_email` in `beamer_common.py`); previously AMS always emitted the placeholder | Yes |
+| 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive); AMS previously matched `supplement`, AGU `supplemental` — a `\section{Supplement}` deck reordered in AMS but not AGU | Yes |
+| 2026-07-04 | Shared: `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` moved from `beamer_to_agu.py` to `beamer_common.py` (KP extractor now returns `[]` and PLS extractor `None` when absent; AGU applies its own defaults) | Yes |

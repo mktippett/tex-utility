@@ -229,14 +229,27 @@ path / `--outdir DIR` to override the defaults.
   except the last, and `and` before the last author only (not between every
   pair) — e.g. `Name One,\aff{a} Name Two,\aff{b} and Name Three\aff{c}`
 - `\abstract{...}` command form
+- Corresponding-author email filled from the `%% AGU_EMAIL:` sentinel
+  (same sentinel as AGU; placeholder if absent)
+- End-matter extracted from the same comment-sentinel-wrapped frames as AGU
+  (see *End-matter sentinels* below): `OPENRESEARCH` → `\datastatement`
+  (AMS's required data availability statement), `ACKS` → `\acknowledgments`;
+  `COI` has no AMS section of its own, so its text is appended to the
+  acknowledgments paragraph. Placed before the bibliography; stubs when
+  sentinels absent
+- `\section*{Key points}` and its frames are consumed and dropped (AGU-only
+  front matter); `\section*{Plain Language Summary}` is consumed and emitted
+  as a commented `%\statement` block after `\maketitle` (AMS's optional
+  significance statement, max 120 words — trim, then uncomment)
 - `natbib` / `\citep` / `\citet` — kept as-is
 - `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and
   injected into the postamble (works regardless of whether they appear inside or outside a frame)
 - `\section{Supplemental…}` is reordered: bibliography + `\clearpage` are injected
   before it so references always precede SI content (mirrors AGU behavior)
 - `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation/
-  abstract block ignored, every figure/table caption ignored, SI ignored — AMS's
-  word-limit rule excludes all of these (captions in particular, unlike AGU, which
+  abstract block ignored, every figure/table caption ignored, endmatter
+  (acknowledgments + data statement) ignored, SI ignored — AMS's word-limit
+  rule excludes all of these (captions in particular, unlike AGU, which
   counts them)
 
 **AGU-specific:**
@@ -247,7 +260,7 @@ path / `--outdir DIR` to override the defaults.
 - `\bibliographystyle` is stripped (the class loads `apacite` automatically)
 - `\bibliography{...}` file name extracted from source and appended after end-matter
 - End-matter (Open Research, Conflict of Interest, Acknowledgments) extracted from
-  comment-sentinel-wrapped frames (see *AGU end-matter sentinels* below); placed before
+  comment-sentinel-wrapped frames (see *End-matter sentinels* below); placed before
   any `\section{Supplemental…}` in the output; per-section stubs used when sentinels absent
 - Display math wrapped in `\begin{linenomath*}...\end{linenomath*}` for line numbering
 - Figures use `\noindent\includegraphics[width=\textwidth]{...}` (no `\centering`)
@@ -262,11 +275,16 @@ path / `--outdir DIR` to override the defaults.
 Things to fill in before sending to coauthors:
 
 **AMS:**
-- Corresponding author email in `\correspondingauthor{}`
+- Corresponding author email — add `%% AGU_EMAIL: you@institution.edu` anywhere in
+  the Beamer preamble (same sentinel as AGU); placeholder is used if absent
+- If sentinels were used: review the extracted `\acknowledgments` (COI text is
+  appended to it) and `\datastatement`; otherwise fill in their stub placeholders
+- Significance statement (optional): trim the commented `%\statement` block after
+  `\maketitle` to 120 words and uncomment it, or delete it
 - Uncomment `\journal{jcli}` (or the relevant code) if submitting via the full AMS package
 - Run `texcount <output>_manuscript.tex` to get a word count; `%TC:ignore` markers are
-  already in place to exclude title/authors/affiliation/abstract, captions, and SI per
-  AMS's word-limit rule
+  already in place to exclude title/authors/affiliation/abstract, captions, endmatter,
+  and SI per AMS's word-limit rule
 
 **AGU:**
 - Journal name in `\journalname{}` — default is `JGR: Atmospheres`
@@ -431,10 +449,11 @@ raw source text, so their location doesn't matter.
 \end{frame}
 ```
 
-### AGU end-matter sentinels
+### End-matter sentinels
 
-The AGU converter extracts Open Research, Conflict of Interest, and
-Acknowledgments from normal Beamer frames marked with comment sentinels.
+Both converters extract Open Research, Conflict of Interest, and
+Acknowledgments from normal Beamer frames marked with comment sentinels
+(the `AGU_` prefix is historical — the AMS converter reads the same markers).
 The frames compile and render as slides; the comment lines are invisible
 to Beamer (no nav-bar entries, no `\section*` clutter).
 
@@ -462,8 +481,10 @@ to Beamer (no nav-bar entries, no `\section*` clutter).
 ```
 
 - The converter strips the `\begin{frame}{...}` / `\end{frame}` wrappers and
-  injects the required AGU header (`\section*{Open Research Section}`,
-  `\section*{Conflict of Interest}`, `\acknowledgments`).
+  injects the journal's header. AGU: `\section*{Open Research Section}`,
+  `\section*{Conflict of Interest}`, `\acknowledgments`. AMS:
+  `\datastatement` (from `OPENRESEARCH`), `\acknowledgments` (from `ACKS`,
+  with the `COI` text appended — AMS has no COI section).
 - `\bibliography{...}` stays in the References frame as usual; the converter
   appends it after the acknowledgments in the manuscript.
 - Any missing sentinel block falls back to a placeholder stub.

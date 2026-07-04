@@ -3,7 +3,7 @@
 beamer_common.py
 ----------------
 Shared Beamer parsing and transformation utilities used by both
-beamer_to_manuscript.py (AMS) and beamer_to_agu.py (AGU).
+beamer_to_ams.py (AMS) and beamer_to_agu.py (AGU).
 """
 
 import re
@@ -36,6 +36,11 @@ _BEAMER_SETUP_RE = re.compile(
 # no commas ("A and B and C"). Alternatives are ordered so a comma (with or
 # without a following "and") is preferred over the bare-'and' fallback.
 _AUTHOR_SEP_RE = re.compile(r'\s*\\and\b\s*|\s*,\s*and\s+|\s*,\s*|\s+and\s+')
+
+# Section titles that mark the start of Supporting Information content.
+# One matcher shared by both converters, consistent with extract_main.py's
+# fallback patterns ("Supplemental", "Supplement", "Supporting Information").
+_SI_SECTION_RE = re.compile(r'supplement|supporting\s+information', re.IGNORECASE)
 
 # Curated allowlist for extract_passthrough_packages: packages that are safe
 # and useful in both AMS and AGU manuscript classes.  Excludes packages already
@@ -710,6 +715,106 @@ def extract_abstract(events):
             return abstract_text, remaining
         i += 1
     return abstract_text, events
+
+
+def is_si_section(event_content):
+    r"""True if a 'section' event's \section{...} string marks the SI boundary."""
+    return bool(_SI_SECTION_RE.search(event_content))
+
+
+def extract_email(src):
+    """Return email from the %% AGU_EMAIL: address sentinel, or placeholder."""
+    m = re.search(r'^%%\s*AGU_EMAIL:\s*(.+)$', src, re.MULTILINE)
+    return m.group(1).strip() if m else 'email@institution.edu'
+
+
+def extract_sentinel_block(body, label):
+    r"""
+    Return (start, end, inner_text) or None.
+
+    Matches line-anchored sentinels:
+        %% AGU_<LABEL>_BEGIN
+        ...inner_text...
+        %% AGU_<LABEL>_END
+
+    The AGU_ prefix is historical; both converters read the same sentinels.
+    """
+    begin_pat = re.compile(r'^%+\s*AGU_' + label + r'_BEGIN\s*$', re.MULTILINE)
+    end_pat   = re.compile(r'^%+\s*AGU_' + label + r'_END\s*$',   re.MULTILINE)
+    m_begin = begin_pat.search(body)
+    m_end   = end_pat.search(body)
+    if m_begin and m_end and m_begin.end() < m_end.start():
+        return m_begin.start(), m_end.end(), body[m_begin.end():m_end.start()]
+    return None
+
+
+def strip_frame_wrappers(text):
+    r"""
+    Remove \begin{frame}...(title line)...\end{frame} wrappers, keeping
+    only the frame body.  Multiple frames are joined with a blank line.
+    If no frames are found (sentinels inside a frame body), returns text
+    stripped and unchanged.
+    """
+    pat = re.compile(r'\\begin\{frame\}[^\n]*\n(.*?)\\end\{frame\}', re.DOTALL)
+    bodies = [m.group(1).strip() for m in pat.finditer(text)]
+    return '\n\n'.join(bodies) if bodies else text.strip()
+
+
+def extract_key_points(events):
+    r"""
+    Find \section*{Key points}, consume it and its following frames,
+    return (items, remaining_events).
+
+    items: list of item strings; [] when no Key points section is found
+    (callers supply their own defaults or drop them).
+    """
+    i = 0
+    while i < len(events):
+        _pos, etype, content = events[i]
+        if etype == 'section':
+            m = re.match(r'\\section\*?\{([^}]*)\}', content)
+            title = m.group(1).strip().lower() if m else ''
+            if 'key point' in title:
+                items = []
+                j = i + 1
+                while j < len(events) and events[j][1] == 'frame':
+                    frame_content = events[j][2]
+                    for item_m in re.finditer(r'\\item\s+(.*?)(?=\\item|\\end|$)',
+                                              frame_content, re.DOTALL):
+                        text = item_m.group(1).strip()
+                        text = re.sub(r'\s+', ' ', text)
+                        if text:
+                            items.append(text)
+                    j += 1
+                return items, events[:i] + events[j:]
+        i += 1
+    return [], events
+
+
+def extract_plain_language_summary(events):
+    r"""
+    Find \section*{Plain Language Summary}, consume it and its following
+    frames, return (pls_text_or_None, remaining_events).
+    Mirrors extract_abstract; returns None when no PLS section is found.
+    """
+    i = 0
+    while i < len(events):
+        _pos, etype, content = events[i]
+        if etype == 'section':
+            m = re.match(r'\\section\*?\{([^}]*)\}', content)
+            title = m.group(1).strip().lower() if m else ''
+            if 'plain language' in title:
+                parts = []
+                j = i + 1
+                while j < len(events) and events[j][1] == 'frame':
+                    transformed = transform_content(events[j][2])
+                    if transformed.strip():
+                        parts.append(transformed.strip())
+                    j += 1
+                pls_text = '\n  '.join(parts) if parts else None
+                return pls_text, events[:i] + events[j:]
+        i += 1
+    return None, events
 
 
 def assemble_body(events, figure_opts=None):

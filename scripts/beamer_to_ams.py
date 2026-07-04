@@ -27,6 +27,12 @@ from beamer_common import (
     preprocess_body,
     build_event_list,
     extract_abstract,
+    extract_email,
+    extract_key_points,
+    extract_plain_language_summary,
+    extract_sentinel_block,
+    is_si_section,
+    strip_frame_wrappers,
     assemble_body,
     transform_content,
 )
@@ -72,6 +78,7 @@ def _parse_authors_affiliations(src):
 # ---------------------------------------------------------------------------
 
 def _build_preamble(title, authors_block, affiliation_block, abstract_text,
+                    statement_block,
                     pkg_ams=r'\usepackage{amsmath,amssymb}'):
     return rf"""\documentclass{{ametsocV6.1}}
 
@@ -98,7 +105,33 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 
 \maketitle
 %TC:endignore
+
+{statement_block}
 """
+
+
+def _build_statement_block(pls_text):
+    r"""
+    Commented \statement block, mirroring the optional significance-statement
+    stub in the official templateV6.1.tex (all AMS journals except BAMS;
+    max 120 words).
+
+    When the slides carry a Plain Language Summary, its text is included
+    (commented) as a starting point.  Emitted commented-out rather than live
+    because a PLS is typically longer than 120 words -- the author trims,
+    then uncomments.
+    """
+    lines = [
+        '%% Significance statement (optional, max 120 words): trim the text',
+        r'%% below, then uncomment \statement and the text lines.',
+        r'%\statement',
+    ]
+    if pls_text:
+        for line in pls_text.splitlines():
+            lines.append('%  ' + line.strip())
+    else:
+        lines.append('%  Enter significance statement here, no more than 120 words.')
+    return '\n'.join(lines)
 
 
 # AMS word-count rules exclude figure/table captions (unlike AGU, which counts
@@ -107,6 +140,52 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 _AMS_FIGURE_OPTS = {
     'caption_tcignore': True,
 }
+
+# Endmatter sentinel labels shared with beamer_to_agu.py (%% AGU_<LABEL>_BEGIN/
+# END around normal Beamer frames).  AMS mapping: OPENRESEARCH -> the required
+# \datastatement, ACKS -> \acknowledgments; COI has no AMS section of its own,
+# so its text is appended to the acknowledgments paragraph.
+_ENDMATTER_STUBS = {
+    'ACKS': 'Enter acknowledgments here.',
+    'OPENRESEARCH': ('Data availability statement here: where the data '
+                     'supporting the findings can be accessed (repository '
+                     'and DOI/URL). If access is restricted, state that '
+                     'here.'),
+}
+
+
+def _sentinel_content(sentinel_inner, label):
+    """Frame body of a sentinel block, transformed to manuscript prose,
+    or None if the sentinel is absent."""
+    inner = sentinel_inner.get(label)
+    if inner is None:
+        return None
+    frame_body = strip_frame_wrappers(inner)
+    frame_body = re.sub(r'\\fig\{([^}]+)\}', r'\\includegraphics{\1}', frame_body)
+    return transform_content(frame_body, figure_opts=_AMS_FIGURE_OPTS).strip()
+
+
+def _build_endmatter(sentinel_inner):
+    r"""
+    \acknowledgments + \datastatement block, emitted immediately before the
+    bibliography.  Wrapped in %TC:ignore -- AMS's word-limit rule excludes
+    acknowledgments and the data availability statement.
+    """
+    acks = _sentinel_content(sentinel_inner, 'ACKS') or _ENDMATTER_STUBS['ACKS']
+    coi = _sentinel_content(sentinel_inner, 'COI')
+    if coi:
+        acks += '\n\n' + coi
+    data = (_sentinel_content(sentinel_inner, 'OPENRESEARCH')
+            or _ENDMATTER_STUBS['OPENRESEARCH'])
+    return '\n'.join([
+        '%TC:ignore',
+        r'\acknowledgments',
+        acks,
+        '',
+        r'\datastatement',
+        data,
+        '%TC:endignore',
+    ])
 
 
 def _build_postamble(bib_style, bib_file):
@@ -127,8 +206,27 @@ def convert(input_path, output_path):
 
     title_text = _extract_preamble_arg(src, 'title') or 'TITLE'
 
+    # --- Extract endmatter sentinel blocks BEFORE preprocessing --------------
+    # Same %% AGU_*_BEGIN/END convention as beamer_to_agu.py: the sentinel
+    # comment lines are stripped by preprocess_body, so detection must run on
+    # the original source, and the wrapped frames are removed from src so
+    # they never enter the manuscript event list.
+    sentinel_inner = {}   # label -> raw inner text (frame + content)
+    sentinel_regions = [] # (start, end) in src
+    for label in ('OPENRESEARCH', 'COI', 'ACKS'):
+        block = extract_sentinel_block(src, label)
+        if block:
+            start, end, inner = block
+            sentinel_inner[label] = inner
+            sentinel_regions.append((start, end))
+
+    src_for_body = src
+    for start, end in sorted(sentinel_regions, reverse=True):
+        src_for_body = src_for_body[:start] + src_for_body[end:]
+
     authors, affiliation_block = _parse_authors_affiliations(src)
 
+    email = extract_email(src)
     author_parts = []
     last = len(authors) - 1
     for idx, (name, aff) in enumerate(authors):
@@ -138,23 +236,32 @@ def convert(input_path, output_path):
         part += r'\aff{' + aff + '}'
         if idx == 0:
             abbrev = _abbreviate_name(name)
-            part += r'\correspondingauthor{' + abbrev + ',\n    email@institution.edu}'
+            part += r'\correspondingauthor{' + abbrev + ',\n    ' + email + '}'
         if idx == last and last > 0:
             part = 'and ' + part
         author_parts.append(part)
     authors_block = r'\authors{' + ' '.join(author_parts) + '}'
 
-    body = preprocess_body(src)
+    body = preprocess_body(src_for_body)
     events = build_event_list(body, keep_bibliographystyle=False)
     abstract_text, events = extract_abstract(events)
+
+    # AGU-oriented front matter has no AMS slot: Key points are dropped;
+    # the Plain Language Summary feeds the commented \statement block.
+    _keypoints, events = extract_key_points(events)
+    pls_text, events = extract_plain_language_summary(events)
+    statement_block = _build_statement_block(pls_text)
+
+    endmatter = _build_endmatter(sentinel_inner)
 
     bib_style = _extract_bib_style(src)
     bib_file = _extract_bib_file(src)
 
-    # Move bibliography before any supplemental section, mirroring AGU logic.
+    # Move endmatter + bibliography before any supplemental section,
+    # mirroring AGU logic.
     supp_idx = next(
         (i for i, (_, etype, content) in enumerate(events)
-         if etype == 'section' and 'supplement' in content.lower()),
+         if etype == 'section' and is_si_section(content)),
         None
     )
     if supp_idx is not None:
@@ -165,10 +272,10 @@ def convert(input_path, output_path):
                           re.search(r'\\bibliography\{', e[2]))]
         supp_idx = next(
             (i for i, (_, etype, content) in enumerate(events)
-             if etype == 'section' and 'supplement' in content.lower()),
+             if etype == 'section' and is_si_section(content)),
             None
         )
-        bib_lines = []
+        bib_lines = [endmatter, '']
         if bib_style:
             bib_lines.append(r'\bibliographystyle{' + bib_style + '}')
         bib_lines.append(r'\bibliography{' + bib_file + '}')
@@ -180,10 +287,10 @@ def convert(input_path, output_path):
         bib_lines.append(r'%TC:ignore')
         events.insert(supp_idx, (0, 'passthrough', '\n'.join(bib_lines)))
         events = [e for e in events
-                  if not (e[1] == 'section' and 'supplement' in e[2].lower())]
+                  if not (e[1] == 'section' and is_si_section(e[2]))]
         postamble = '%TC:endignore\n' + r'\end{document}' + '\n'
     else:
-        postamble = _build_postamble(bib_style, bib_file)
+        postamble = endmatter + '\n\n' + _build_postamble(bib_style, bib_file)
 
     if not events:
         print("Warning: no frames or sections found; writing body as-is.",
@@ -194,7 +301,7 @@ def convert(input_path, output_path):
 
     pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,
-                               pkg_ams=pkg_ams)
+                               statement_block, pkg_ams=pkg_ams)
     out = preamble + '\n' + manuscript_body + '\n' + postamble
     Path(output_path).write_text(out, encoding='utf-8')
     print(f"Written: {output_path}")

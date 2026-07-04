@@ -68,12 +68,14 @@ Steps 4.1–4.4 are shared with the AMS converter via `beamer_common.py`:
    as section events, passed through verbatim (no promotion/demotion between
    levels); AGU omits `\bibliographystyle` passthroughs because the class loads
    `apacite` internally.
-5. **End-matter sentinels**: `_extract_sentinel_block` run on original `src` for labels
+5. **End-matter sentinels**: `extract_sentinel_block` (shared, `beamer_common.py`;
+   the AMS converter reads the same sentinels) run on original `src` for labels
    `OPENRESEARCH`, `COI`, `ACKS`; sentinel regions stripped from source before preprocessing;
    frame wrappers stripped; AGU headers injected; assembled as single event before Supplemental.
 6. **Abstract**: `extract_abstract` — consumes `\section{Abstract}` and following frames.
-7. **Plain Language Summary**: `_extract_plain_language_summary` — consumes
-   `\section*{Plain Language Summary}` and following frames; injects into preamble.
+7. **Plain Language Summary**: `extract_plain_language_summary` (shared) — consumes
+   `\section*{Plain Language Summary}` and following frames; injects into preamble
+   (returns `None` when absent; AGU substitutes its placeholder text).
 8. **Body assembly**: `assemble_body(events, figure_opts=_AGU_FIGURE_OPTS)`.
 
 ### 4.2 AGU author/affiliation parsing (`_parse_authors_affiliations_agu`)
@@ -191,13 +193,15 @@ to Beamer (pure `%` comments).
 %% AGU_ACKS_END
 ```
 
-**Extraction pipeline** (`_extract_sentinel_block`, `_strip_frame_wrappers`):
+**Extraction pipeline** (`extract_sentinel_block`, `strip_frame_wrappers` —
+both shared in `beamer_common.py`; the AMS converter reads the same sentinels
+with its own header mapping, see `specs/beamer_to_ams_spec.md` §4.9):
 
 1. Sentinel detection runs on the **original source** (`src`) before
    `preprocess_body`, because `preprocess_body` strips `%` comment lines.
 2. The sentinel-marked regions are **removed from `src`** before calling
    `preprocess_body`, so the wrapped frames never enter the manuscript event list.
-3. For each found sentinel, `_strip_frame_wrappers` strips the
+3. For each found sentinel, `strip_frame_wrappers` strips the
    `\begin{frame}{...}` / `\end{frame}` wrappers (the frame title is discarded;
    the AGU section header replaces it). `transform_content` processes the body.
 4. The converter **injects the AGU section header** from `_SENTINEL_HEADERS`:
@@ -210,12 +214,16 @@ to Beamer (pure `%` comments).
 7. The assembled endmatter event is moved before any Supplemental section (same
    reorder logic as before).
 
-### 4.9 Plain Language Summary extraction (`_extract_plain_language_summary`)
+### 4.9 Plain Language Summary extraction (`extract_plain_language_summary`)
 
-Mirrors `extract_abstract`. Finds `\section*{Plain Language Summary}` (matched by
-`\section\*?\{...\}` regex), consumes it and all immediately following frame events,
-transforms their content, and returns `(pls_text, remaining_events)`.
-The PLS text is injected into the `{pls_text}` slot in `_build_agu_preamble`.
+Shared in `beamer_common.py`. Mirrors `extract_abstract`. Finds
+`\section*{Plain Language Summary}` (matched by `\section\*?\{...\}` regex),
+consumes it and all immediately following frame events, transforms their
+content, and returns `(pls_text_or_None, remaining_events)`. AGU substitutes
+`'Enter plain language summary here.'` when `None`; the text is injected into
+the `{pls_text}` slot in `_build_agu_preamble`. Likewise `extract_key_points`
+(shared) returns `[]` when no Key points section is found; `_build_agu_preamble`
+pads with `_KP_DEFAULTS`.
 
 ### 4.10 Word-count markers (`%TC:ignore` / `%TC:endignore`)
 
@@ -268,12 +276,12 @@ exclusions, and the 12 PU limit for GRL letters).
 | `\renewcommand\thetable` / `\setcounter{table}` | Passed through verbatim for supplemental table numbering |
 | `\clearpage` outside frames | Passed through verbatim |
 | `\section{Abstract}` | Consumed into `\begin{abstract}...\end{abstract}` block; removed from body |
-| `\section*{Plain Language Summary}` + frames | Consumed by `_extract_plain_language_summary`; injected into preamble PLS slot |
+| `\section*{Plain Language Summary}` + frames | Consumed by `extract_plain_language_summary` (shared); injected into preamble PLS slot |
 | `\section*{Plain Language Summary}` merging into abstract | Fixed by capturing `\section*{...}` as section events; stops `extract_abstract` over-consuming |
 | Sentinel blocks in source | Extracted before `preprocess_body`; frames removed from body; AGU headers injected; assembled as single endmatter event |
 | Missing sentinel block | Per-section stub (`_STUBS[label]`) used; other sentinel blocks are unaffected |
-| Sentinels inside a frame body (not wrapping a frame) | `_strip_frame_wrappers` finds no frame wrappers; content returned as-is |
-| End-matter after `\section{Supplemental…}` in source | Reordered to appear before Supplemental in output |
+| Sentinels inside a frame body (not wrapping a frame) | `strip_frame_wrappers` finds no frame wrappers; content returned as-is |
+| End-matter after `\section{Supplemental…}` in source | Reordered to appear before Supplemental in output (`is_si_section` shared matcher: `supplement` or `supporting information`, case-insensitive) |
 | No Supplemental section | SI checklist counts stay 0; all three items commented out |
 | SI has figures but no `\fig{}`| Falls back to counting `\includegraphics{` in SI frame content |
 | SI has tables via `\begin{table}` only (no `tabular`) | Falls back to counting `\begin{table` if `\begin{tabular` count is 0 |
@@ -312,3 +320,5 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-06-24 | Shared: `extract_passthrough_packages` broadened from math-only to a curated allowlist (adds booktabs, multirow, array, tabularx, makecell, threeparttable, dcolumn, longtable, mathtools) | Yes |
 | 2026-07-02 | Shared: fixed `_parse_inst_blocks` author-list split — old `\s+and\s+` regex never matched the Beamer `\and` command and mis-split comma/English-list authors, silently dropping middle co-authors; replaced with `_AUTHOR_SEP_RE` (matches `\and` or comma/"and" list) | Yes |
 | 2026-07-03 | Shared: section-event regex extended from `\section` to `\(?:sub\)?section` in `build_event_list` and `extract_abstract`'s title match; `\subsection{...}`/`\subsection*{...}` outside a frame is now captured as a `section` event and passed through verbatim (previously matched no event type and was silently dropped) | Yes |
+| 2026-07-04 | Shared: `_extract_sentinel_block`, `_strip_frame_wrappers`, `_extract_email`, `_extract_key_points`, `_extract_plain_language_summary` moved to `beamer_common.py` as `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` (now also used by the AMS converter). Return-value change: KP extractor returns `[]` and PLS extractor `None` when the section is absent; AGU applies `_KP_DEFAULTS`/placeholder itself. AGU output byte-identical before/after (verified on tests/test_input.tex) | Yes |
+| 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive; previously AGU matched only `supplemental` — a `\section{Supplement}` or `\section{Supporting Information}` deck was silently not reordered) | Yes |

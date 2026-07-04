@@ -26,6 +26,12 @@ from beamer_common import (
     preprocess_body,
     build_event_list,
     extract_abstract,
+    extract_email,
+    extract_key_points,
+    extract_plain_language_summary,
+    extract_sentinel_block,
+    is_si_section,
+    strip_frame_wrappers,
     assemble_body,
     transform_content,
 )
@@ -198,12 +204,6 @@ def _wrap_equations_linenomath(text):
 # ---------------------------------------------------------------------------
 
 
-def _extract_email(src):
-    """Return email from %% AGU_EMAIL: address sentinel, or placeholder string."""
-    m = re.search(r'^%%\s*AGU_EMAIL:\s*(.+)$', src, re.MULTILINE)
-    return m.group(1).strip() if m else 'email@institution.edu'
-
-
 def _make_si_checklist(n_figs, n_tables):
     """Build the Contents of this file enumerate block for the SI header."""
     lines = [
@@ -265,64 +265,6 @@ def _build_si_header(title, authors_block, affiliation_lines, n_si_figs=0, n_si_
         '',
         r'\clearpage',
     ])
-
-
-def _extract_key_points(events):
-    """
-    Find \\section*{Key points}, consume it and its following frames,
-    return (keypoints_items, remaining_events).
-
-    keypoints_items: list of up to 3 item strings (140-char AGU limit).
-    Falls back to placeholder strings if not found.
-    """
-    i = 0
-    while i < len(events):
-        _pos, etype, content = events[i]
-        if etype == 'section':
-            m = re.match(r'\\section\*?\{([^}]*)\}', content)
-            title = m.group(1).strip().lower() if m else ''
-            if 'key point' in title:
-                items = []
-                j = i + 1
-                while j < len(events) and events[j][1] == 'frame':
-                    frame_content = events[j][2]
-                    for item_m in re.finditer(r'\\item\s+(.*?)(?=\\item|\\end|$)',
-                                              frame_content, re.DOTALL):
-                        text = item_m.group(1).strip()
-                        text = re.sub(r'\s+', ' ', text)
-                        if text:
-                            items.append(text)
-                    j += 1
-                return items or _KP_DEFAULTS, events[:i] + events[j:]
-        i += 1
-    return _KP_DEFAULTS, events
-
-
-def _extract_plain_language_summary(events):
-    """
-    Find \\section*{Plain Language Summary}, consume it and its following frames,
-    return (pls_text, remaining_events).  Mirrors extract_abstract.
-    """
-    pls_text = 'Enter plain language summary here.'
-    i = 0
-    while i < len(events):
-        _pos, etype, content = events[i]
-        if etype == 'section':
-            m = re.match(r'\\section\*?\{([^}]*)\}', content)
-            title = m.group(1).strip().lower() if m else ''
-            if 'plain language' in title:
-                parts = []
-                j = i + 1
-                while j < len(events) and events[j][1] == 'frame':
-                    transformed = transform_content(events[j][2])
-                    if transformed.strip():
-                        parts.append(transformed.strip())
-                    j += 1
-                if parts:
-                    pls_text = '\n  '.join(parts)
-                return pls_text, events[:i] + events[j:]
-        i += 1
-    return pls_text, events
 
 
 def _extract_journal_name(src):
@@ -428,36 +370,6 @@ _SENTINEL_HEADERS = {
 }
 
 
-def _extract_sentinel_block(body, label):
-    r"""
-    Return (start, end, inner_text) or None.
-
-    Matches line-anchored sentinels:
-        %% AGU_<LABEL>_BEGIN
-        ...inner_text...
-        %% AGU_<LABEL>_END
-    """
-    begin_pat = re.compile(r'^%+\s*AGU_' + label + r'_BEGIN\s*$', re.MULTILINE)
-    end_pat   = re.compile(r'^%+\s*AGU_' + label + r'_END\s*$',   re.MULTILINE)
-    m_begin = begin_pat.search(body)
-    m_end   = end_pat.search(body)
-    if m_begin and m_end and m_begin.end() < m_end.start():
-        return m_begin.start(), m_end.end(), body[m_begin.end():m_end.start()]
-    return None
-
-
-def _strip_frame_wrappers(text):
-    r"""
-    Remove \\begin{frame}...(title line)...\\end{frame} wrappers, keeping
-    only the frame body.  Multiple frames are joined with a blank line.
-    If no frames are found (sentinels inside a frame body), returns text
-    stripped and unchanged.
-    """
-    pat = re.compile(r'\\begin\{frame\}[^\n]*\n(.*?)\\end\{frame\}', re.DOTALL)
-    bodies = [m.group(1).strip() for m in pat.finditer(text)]
-    return '\n\n'.join(bodies) if bodies else text.strip()
-
-
 # ---------------------------------------------------------------------------
 # Main converter
 # ---------------------------------------------------------------------------
@@ -487,7 +399,7 @@ def convert(input_path, output_path, journal=None):
     sentinel_inner = {}   # label -> raw inner text (frame + content)
     sentinel_regions = [] # (start, end) in src
     for label in _SENTINEL_HEADERS:
-        block = _extract_sentinel_block(src, label)
+        block = extract_sentinel_block(src, label)
         if block:
             start, end, inner = block
             sentinel_inner[label] = inner
@@ -509,7 +421,7 @@ def convert(input_path, output_path, journal=None):
     endmatter_pieces = []
     for label, agu_header in _SENTINEL_HEADERS.items():
         if label in sentinel_inner:
-            frame_body = _strip_frame_wrappers(sentinel_inner[label])
+            frame_body = strip_frame_wrappers(sentinel_inner[label])
             frame_body = re.sub(r'\\fig\{([^}]+)\}', r'\\includegraphics{\1}', frame_body)
             processed = transform_content(frame_body, figure_opts=_AGU_FIGURE_OPTS)
             endmatter_pieces.append(agu_header + '\n' + processed.strip())
@@ -522,7 +434,7 @@ def convert(input_path, output_path, journal=None):
     # Count SI figures and tables for the checklist (scan before appending endmatter)
     _supp_i = next(
         (i for i, (_, etype, content) in enumerate(events)
-         if etype == 'section' and 'supplemental' in content.lower()),
+         if etype == 'section' and is_si_section(content)),
         None
     )
     n_si_figs, n_si_tables = 0, 0
@@ -547,7 +459,7 @@ def convert(input_path, output_path, journal=None):
     # appear before the appendix in the output.
     supp_idx = next(
         (i for i, (_, etype, content) in enumerate(events)
-         if etype == 'section' and 'supplemental' in content.lower()),
+         if etype == 'section' and is_si_section(content)),
         None
     )
     # em_text was appended with position len(body)+1 — always sorts last
@@ -558,14 +470,16 @@ def convert(input_path, output_path, journal=None):
 
     # Strip the supplemental section marker (keep its content frames).
     events = [e for e in events
-              if not (e[1] == 'section' and 'supplemental' in e[2].lower())]
+              if not (e[1] == 'section' and is_si_section(e[2]))]
 
     postamble = _AGU_CLOSE
 
     # --- Extract preamble blocks from events --------------------------------
     abstract_text, events = extract_abstract(events)
-    pls_text, events = _extract_plain_language_summary(events)
-    keypoints_items, events = _extract_key_points(events)
+    pls_text, events = extract_plain_language_summary(events)
+    if pls_text is None:
+        pls_text = 'Enter plain language summary here.'
+    keypoints_items, events = extract_key_points(events)
 
     # --- Build manuscript body ----------------------------------------------
     if not events:
@@ -586,7 +500,7 @@ def convert(input_path, output_path, journal=None):
         title_text, authors_block, affiliation_lines,
         corresponding, abstract_text, pls_text, journal_name, keypoints_items,
         pkg_ams=pkg_ams,
-        email=_extract_email(src),
+        email=extract_email(src),
     )
     out = preamble + manuscript_body + '\n' + postamble
     Path(output_path).write_text(out, encoding='utf-8')

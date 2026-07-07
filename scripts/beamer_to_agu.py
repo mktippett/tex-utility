@@ -62,10 +62,11 @@ def _parse_authors_affiliations_agu(src):
     parsed, inst_map, inst_nums = _parse_inst_blocks(src)
 
     if not inst_nums:
-        inst_nums = list(range(1, len(parsed) + 1))
-        inst_map = {i + 1: 'Department, Institution, City, Country'
-                    for i in range(len(parsed))}
-        parsed = [(name, i + 1) for i, (name, _) in enumerate(parsed)]
+        # No \inst{} markup: every author shares the single \institute{}
+        # (Beamer semantics). Placeholder only when \institute{} is absent too.
+        inst_nums = [1]
+        inst_map.setdefault(1, 'Department, Institution, City, Country')
+        parsed = [(name, 1) for name, _ in parsed]
 
     author_parts = []
     for name, num in parsed:
@@ -448,9 +449,14 @@ def convert(input_path, output_path, journal=None):
         if n_si_tables == 0:
             n_si_tables = len(re.findall(r'\\begin\{table', _si_raw))
 
-    si_header = _build_si_header(title_text, authors_block, affiliation_lines,
-                                 n_si_figs=n_si_figs, n_si_tables=n_si_tables)
-    em_text = '%TC:ignore\n\n' + '\n\n'.join(endmatter_pieces) + '\n\n' + bib_line + '\n\n' + si_header
+    # SI scaffold (cover page + checklist) only when the deck has an SI
+    # section; a no-SI paper gets endmatter + bibliography and no %% SI_BEGIN
+    # (run extract_main.py with --no-si on such a manuscript).
+    em_text = '%TC:ignore\n\n' + '\n\n'.join(endmatter_pieces) + '\n\n' + bib_line
+    if _supp_i is not None:
+        si_header = _build_si_header(title_text, authors_block, affiliation_lines,
+                                     n_si_figs=n_si_figs, n_si_tables=n_si_tables)
+        em_text += '\n\n' + si_header
 
     # Append at end of body; the Supplemental reorder below repositions it.
     events.append((len(body) + 1, 'passthrough', em_text))
@@ -481,6 +487,12 @@ def convert(input_path, output_path, journal=None):
     if pls_text is None:
         pls_text = 'Enter plain language summary here.'
     keypoints_items, events = extract_key_points(events)
+
+    # Front matter bypasses the body-wide post-processing below, so remap
+    # citations here too -- natbib commands are undefined under apacite.
+    abstract_text = _remap_citations_to_apacite(abstract_text)
+    pls_text = _remap_citations_to_apacite(pls_text)
+    keypoints_items = [_remap_citations_to_apacite(k) for k in keypoints_items]
 
     # --- Build manuscript body ----------------------------------------------
     if not events:

@@ -19,6 +19,9 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
   — no dangling references, and no inflation of `texcount`'s word count.
   `\pageref{}` to an SI item *is* replaced with the literal page number from
   the `.aux`, since the SI's own page numbering doesn't exist in `main.tex`.
+- Rebases relative `\includegraphics` paths so they resolve from the output
+  directory (they resolve against the combined file's own directory, one
+  level up from `<stem>_SUBMIT/`); absolute paths are untouched.
 - Extracts each `\begin{figure}...\end{figure}` block into its own
   `figN.pdf` (via `make_single_figure.sh`) and rewrites the
   `\includegraphics` path(s) to the bare filename `figN.pdf`, collapsing
@@ -73,7 +76,14 @@ Checked in priority order; the first match wins:
 3. **Fallback**: `\renewcommand\thefigure{S\arabic{figure}}` (the SI
    figure-numbering redefinition both converters emit).
 
-If none match, the script aborts with an error and writes nothing.
+If none match, the script aborts with an error (suggesting `--no-si`) and
+writes nothing.
+
+With `--no-si` (for manuscripts that have no SI — e.g. a no-SI deck converted
+by `beamer_to_agu.py`, which emits no `%% SI_BEGIN` in that case), boundary
+detection and SI stripping are skipped entirely; the rest of the packaging
+(ref flattening — a no-op without S-labels — path rebasing, `.bbl` inlining,
+figure extraction) still runs.
 
 ### 4.2 SI stripping (`strip_si`)
 
@@ -195,11 +205,21 @@ as `aux_path`). If `bbl_path` doesn't exist, `\bibliography{}` is left live
 and a warning is emitted — same graceful-degradation pattern as a missing
 `.aux`.
 
+### 4.6b Graphics path rebasing (`rebase_graphics_paths`)
+
+Runs before `main.tex` is written, whenever `outdir` differs from the
+combined file's directory. Every relative `\includegraphics` path is
+rewritten via `os.path.relpath(src_dir / path, outdir)` so it resolves from
+`outdir` (e.g. `../plots/a.pdf` → `../../plots/a.pdf` for the default
+`<stem>_SUBMIT/` layout). Absolute paths are untouched. Without this, both
+the `make_single_figure.sh` harness compile (cwd = outdir) and `main.tex`
+itself fail to find graphics referenced with the slide convention's
+relative paths.
+
 ### 4.7 Figure extraction and rewriting
 
 1. `count_figure_envs` / `_live_figure_envs`: find
-   `\begin{figure}...\end{figure}` blocks (`re.DOTALL`, matching
-   `make_single_figure.sh`'s `awk '/\\begin{figure}/,/\\end{figure}/'` range),
+   `\begin{figure}...\end{figure}` blocks (`re.DOTALL`),
    **skipping any whose `\begin{figure}` is commented out** (`_is_commented`:
    an unescaped `%` earlier on the same line). This matters because AGU
    template boilerplate often leaves commented-out example figure blocks
@@ -207,9 +227,17 @@ and a warning is emitted — same graceful-degradation pattern as a missing
    pages in `make_single_figure.sh`'s harness PDF and must not consume a
    `figN` slot or be miscounted.
 2. If `count_figure_envs(main_text) == 0`, skip figure extraction entirely.
-3. Otherwise run `make_single_figure.sh main.tex` (cwd = outdir) →
+3. Otherwise run `make_single_figure.sh main.tex N` (cwd = outdir) →
    `fig1.pdf ... figN.pdf`, one per live figure environment in document
-   order (N = `count_figure_envs` result).
+   order. **N (= `count_figure_envs` result) is passed explicitly** so the
+   script and Python can never disagree on the count; the script's fallback
+   grep and its awk figure filter both skip commented-out `\begin{figure}`
+   lines to match `_live_figure_envs`. The harness document uses the plain
+   `article` class + `geometry` (1in margins ≈ journal `\textwidth`; no
+   journal `.cls` install needed), no-ops `\caption` (optional `[short]`
+   arg included), appends `\clearpage` after each figure so page N is
+   always figure N, and runs pdflatex with
+   `-interaction=nonstopmode -halt-on-error`.
 4. `rewrite_figure_includes`: walk the same live figure environments in
    order (1-based `n`). In the `n`-th block, replace the **first**
    `\includegraphics[opts]{...}` with `\includegraphics[opts]{figN.pdf}`
@@ -233,7 +261,9 @@ and a warning is emitted — same graceful-degradation pattern as a missing
 
 | Situation | Handling |
 |-----------|----------|
-| No SI boundary found | Abort, nothing written |
+| No SI boundary found | Abort, nothing written; error message suggests `--no-si` |
+| `--no-si` | Boundary detection and SI stripping skipped; ref flattening (no-op without S-labels), path rebasing, `.bbl` inlining, and figure extraction still run |
+| Relative `\includegraphics` paths | Rebased to resolve from `outdir` (§4.6b); absolute paths untouched |
 | `.aux` missing | SI refs left as `\ref{...}` (will render `??`, no reconstruction block emitted); warning emitted |
 | Label referenced but not in `.aux` | Warning ("stale .aux?"), left unchanged |
 | `\ref{}` to a main-text label (ref doesn't start with `S`) | Left unchanged (resolves correctly within `main.tex` itself) |
@@ -260,3 +290,5 @@ and a warning is emitted — same graceful-degradation pattern as a missing
 | 2026-06-13 | Changed default `--outdir` suffix from `<stem>_main/` to `<stem>_SUBMIT/` | Yes |
 | 2026-06-15 | Fixed orphaned `%TC:ignore` after SI truncation (`strip_si` now rebalances by appending `%TC:endignore` before `\end{document}`) — was causing `texcount (errors:3)` | Yes |
 | 2026-06-15 | Replaced literal-number SI ref flattening with `\label{}` reconstruction: `\ref`/`\eqref`/`\autoref`/`\cref`/`\Cref` to SI labels left unchanged, resolved via a `%TC:ignore`-wrapped `\refstepcounter`/`\renewcommand`/`\label{}` block before `\end{document}` (`build_si_label_block`/`insert_si_label_block`), using a `fig:`/`tab:`/`eq:` prefix heuristic to pick the counter; `\pageref{}` to SI labels still flattened to a literal page number. Removes the previously-added `\EMref` wrapper macro/`%TC:macro` directive (rejected as "tricking texcount") | Yes |
+| 2026-07-07 | Added `--no-si` (pipeline-gap audit): manuscripts without SI can now use the packaging (previously hard-abort on missing boundary); added `rebase_graphics_paths` so relative `\includegraphics` paths resolve from `outdir` (slide-convention `../plots/...` previously broke the harness compile). Verified end-to-end with a relative-path deck: convert → compile → extract → `main.tex` compiles in `_SUBMIT/`, fig1/fig2 correct with a commented-out figure block present | Yes |
+| 2026-07-07 | `make_single_figure.sh` hardened: figure count passed explicitly from `count_figure_envs` (fallback grep and awk filter now skip commented `\begin{figure}` lines — previously a commented block desynchronized the counts); harness switched from V5 `ametsoc` class (machine-specific install) to `article` + `geometry`; `\clearpage` after each figure guarantees page N = figure N; `\caption` no-op accepts `[short]`; pdflatex runs `-interaction=nonstopmode -halt-on-error` | Yes |

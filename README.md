@@ -138,12 +138,15 @@ Some journals require one PDF file per figure. This script extracts every
 a single PDF, then splits and crops each page into its own file:
 
 ```bash
-bash scripts/make_single_figure.sh manuscript.tex
+bash scripts/make_single_figure.sh manuscript.tex [NFIGS]
 # → fig1.pdf, fig2.pdf, … (one per figure, cropped to content)
 ```
 
-The figure count is detected automatically. Requires `pdflatex` and `pdfcrop`.
-The manuscript must use the `ametsoc` document class.
+`NFIGS` is the number of live figure environments; `extract_main.py` passes
+its own count, and when omitted it is detected from non-commented
+`\begin{figure}` lines. Commented-out figure blocks are skipped. The
+intermediate document uses the plain `article` class (no journal `.cls`
+needs to be installed). Requires `pdflatex` and `pdfcrop`.
 
 ### Extracting the main-text-only file
 
@@ -159,12 +162,17 @@ main-only manuscript, **without ever writing to the input file**:
   without the sentinel fall back to detecting
   `\section*{Supporting Information...}` / `\section{Supplement...}`, or
   finally `\renewcommand\thefigure{S\arabic{figure}}`.
-- Any `\ref{}`/`\eqref{}`/`\pageref{}` pointing at an SI item is replaced
-  with the literal number it resolved to in the combined document's
-  `.aux` (e.g. `\ref{fig:foo}` → `S3`), so the main-only file has no
-  dangling references. `\autoref`/`\cref`/`\Cref` to SI items are left
-  unchanged with a warning — the noun they print isn't recoverable from
-  the `.aux`, so these need a manual fix.
+- `\ref{}`/`\eqref{}`/`\autoref{}`/`\cref{}`/`\Cref{}` pointing at an SI
+  item are left unchanged; an invisible block of `\label{}` reconstructions
+  (built from the `.aux`'s `S1`, `S2`, ... numbers) is inserted before
+  `\end{document}` so they resolve normally — no dangling references.
+  `\pageref{}` to an SI item is flattened to the literal page number.
+  `\autoref`/`\cref`/`\Cref` on labels without a `fig:`/`tab:`/`eq:` prefix
+  get a warning (the printed noun may need a manual fix).
+- Relative `\includegraphics` paths are rebased so they resolve from the
+  output directory (the combined file's paths resolve from its own
+  directory, one level up from `<stem>_SUBMIT/`); absolute paths are left
+  alone.
 - Each `\begin{figure}...\end{figure}` block is extracted into its own
   `fig1.pdf`, `fig2.pdf`, ... (via `make_single_figure.sh`) and
   `\includegraphics` is rewritten to the bare filename `figN.pdf` — no
@@ -194,8 +202,10 @@ python scripts/extract_main.py main-and-si.tex
 By default the `.aux`/`.bbl` are `<stem>.aux`/`<stem>.bbl` next to the input,
 and output goes to `<stem>_SUBMIT/`. Pass `--no-figures` to skip figure
 extraction (SI strip + ref flattening only), `--no-bib` to skip `.bbl`
-inlining (leaves `\bibliography{}` live), or give an explicit `.aux`/`--bbl`
-path / `--outdir DIR` to override the defaults.
+inlining (leaves `\bibliography{}` live), `--no-si` for a manuscript that
+has no SI (skips boundary detection/stripping, still does the rest of the
+packaging), or give an explicit `.aux`/`--bbl` path / `--outdir DIR` to
+override the defaults.
 
 ---
 
@@ -206,7 +216,9 @@ path / `--outdir DIR` to override the defaults.
 - `\author{...}` → author list with affiliations. Accepts either Beamer's
   `\and`-separated form (`Name\inst{1} \and Name\inst{2}`) or a plain
   comma-separated English list (`Name\inst{1}, Name\inst{2}, and Name\inst{3}`)
-- `\institute{\inst{1} Affil one \and \inst{2} Affil two}` → affiliation block
+- `\institute{\inst{1} Affil one \and \inst{2} Affil two}` → affiliation block;
+  without `\inst{}` markup, all authors share the single `\institute{}` text
+  (placeholder only when `\institute{}` is absent too)
 
 **From the body:**
 - `\section{}`, `\section*{}`, `\subsection{}`, and `\subsection*{}` commands
@@ -214,7 +226,10 @@ path / `--outdir DIR` to override the defaults.
 - Frame titles are dropped; frame content becomes prose paragraphs
 - `\section{Abstract}` and its frames are extracted into the abstract block
 - `\includegraphics` is wrapped in `\begin{figure}` with `\caption` and `\label`
-- `\captionof{figure}{...}` is converted to `\caption{...}`
+- Bare `tabular`/`tabular*`/`tabularx` blocks are wrapped in `\begin{table}`,
+  with an adjacent `\caption{}` (immediately before or after the tabular) and
+  its `\label{}` attached; the caption is placed above the tabular
+- `\captionof{figure}{...}` / `\captionof{table}{...}` are converted to `\caption{...}`
 - `\fig{path}` (Beamer shorthand macro) expanded to `\includegraphics{path}`
 - `enumerate`/`itemize` lists are flattened to prose sentences
 - Beamer overlay and layout commands (`\pause`, `\only`, `\alert`, `\columns`, etc.) are stripped
@@ -257,11 +272,17 @@ path / `--outdir DIR` to override the defaults.
 - `\begin{abstract}...\end{abstract}` environment
 - `\section*{Plain Language Summary}` and its frames extracted into the preamble PLS block
 - `apacite` — `\citet{key}` → `\citeA{key}`, `\citep{key}` → `\cite{key}`
+  (applied to the body and to the abstract / Plain Language Summary /
+  key points extracted into the preamble)
 - `\bibliographystyle` is stripped (the class loads `apacite` automatically)
 - `\bibliography{...}` file name extracted from source and appended after end-matter
 - End-matter (Open Research, Conflict of Interest, Acknowledgments) extracted from
   comment-sentinel-wrapped frames (see *End-matter sentinels* below); placed before
   any `\section{Supplemental…}` in the output; per-section stubs used when sentinels absent
+- The SI scaffold (`%% SI_BEGIN`, cover page, "Contents of this file"
+  checklist) is emitted only when the deck has a `\section{Supplemental…}`;
+  a no-SI deck gets endmatter + bibliography and nothing after (use
+  `extract_main.py --no-si` on such a manuscript)
 - Display math wrapped in `\begin{linenomath*}...\end{linenomath*}` for line numbering
 - Figures use `\noindent\includegraphics[width=\textwidth]{...}` (no `\centering`)
 - Publication-unit guidance comment inserted between `\journalname{}` and `\begin{document}`

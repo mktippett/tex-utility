@@ -31,9 +31,9 @@
 \section{Abstract}
 \begin{frame}{Abstract}
 This study tests all features of the Beamer-to-manuscript conversion
-pipeline. We verify metadata extraction, citation remapping, equation
-wrapping, figure and table formatting, list flattening, and supplemental
-information handling.
+pipeline, extending \citet{wheeler2004}. We verify metadata extraction,
+citation remapping, equation wrapping, figure and table formatting, list
+flattening, and supplemental information handling.
 \end{frame}
 
 % -----------------------------------------------------------------------
@@ -155,6 +155,10 @@ Right column content.
 \end{frame}
 
 \begin{frame}{Summary Table}
+% Caption above the tabular (journal convention); converter wraps both in a
+% table float with the caption kept above.
+\captionof{table}{Comparison of forecast and observed amplitude statistics.}
+\label{tab:summary}
 \begin{tabular}{lcc}
 \hline
 Metric         & Forecast & Observed \\

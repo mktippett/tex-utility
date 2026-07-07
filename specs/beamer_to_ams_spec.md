@@ -56,8 +56,9 @@ effect on `-sum`):
 - Front matter: `%TC:ignore` immediately after `\begin{document}`,
   `%TC:endignore` immediately after `\maketitle` (`_build_preamble`) — wraps
   title/authors/affiliation/abstract in one block.
-- Captions: every generated `\caption{...}` is individually wrapped in
-  `%TC:ignore`/`%TC:endignore` (`_restructure_figures`, gated by the
+- Captions: every generated `\caption{...}` — figure **and** table — is
+  individually wrapped in `%TC:ignore`/`%TC:endignore`
+  (`_restructure_figures`/`_restructure_tables`, gated by the
   `caption_tcignore` option threaded through `figure_opts`; AMS sets
   `_AMS_FIGURE_OPTS = {'caption_tcignore': True}`, AGU leaves it `False` so
   its captions still count per AGU's rule).
@@ -204,6 +205,20 @@ Applied to each frame's raw content string in order:
      `_AMS_FIGURE_OPTS`), wrap the emitted `\caption{...}` line in
      `%TC:ignore`/`%TC:endignore` so `texcount` excludes it — see the
      `%TC` markers subsection under §3.
+   - Caption+label lookahead uses the shared `_parse_caption` helper
+     (balanced braces; skips `\captionof`/`\captionsetup`; consumes an
+     optional `[short]` argument and a following `\label{}`).
+6b. **Table restructuring** — `_restructure_tables` (runs after figures):
+   - Wrap bare `tabular`/`tabular*`/`tabularx` blocks in a `\begin{table}`
+     float (same `placement`/`centering`/`caption_tcignore` options as
+     figures; `_find_env_end` handles same-name nesting).
+   - Skip tabulars already inside `\begin{table}...\end{table}`.
+   - Attach an adjacent `\caption{}` — immediately **before** the tabular
+     (separated only by whitespace; found via `rfind` + `_parse_caption` +
+     whitespace-only-gap check) or immediately **after** it — plus the
+     caption's `\label{}`. The caption is emitted **above** the tabular
+     (journal convention). Previously a slide's `\captionof{table}{...}`
+     became a bare `\caption{}` outside any float — a LaTeX error.
 7. **List flattening** — `_flatten_lists`: `\begin{enumerate|itemize}...\end{...}`
    → prose paragraph; each `\item` becomes a sentence ending with `.`.
 8. **Block environments** — `\begin{block}{Title}` → `\textbf{Title}`.
@@ -288,8 +303,10 @@ bibliography in both postamble variants (§4.5).
 | No `%% EMAIL:` (or legacy `%% AGU_EMAIL:`) sentinel | `\correspondingauthor{}` uses `email@institution.edu` placeholder |
 | No Key points / PLS sections | Key points: nothing to drop; `%\statement` block emitted with placeholder text |
 | No `\bibliography{}` in source | `_extract_bib_file` returns `'references'`; `_extract_bib_style` returns `None` (style line omitted) |
-| No `\institute{}` in source | Falls back to per-author `Department, Institution, City, State` placeholder |
-| `\author` without `\inst{}` markers | Authors assigned aff letters sequentially; single `\affiliation` placeholder |
+| `\author` without `\inst{}` markers | All authors share affiliation `a` with the single `\institute{}` text (Beamer semantics: one institute applies to all authors) |
+| No `\institute{}` in source (and no `\inst{}`) | All authors share one `Department, Institution, City, State` placeholder |
+| Bare `tabular` with `\captionof{table}{...}` before or after it | Wrapped in `\begin{table}[h]` with caption (TC-ignored) above the tabular and `\label{}` attached (`_restructure_tables`) |
+| `tabular` already inside `\begin{table}` | Passed through unchanged |
 | `\section{Abstract}` | Consumed into `\abstract{}` preamble block; removed from body |
 | `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
@@ -339,3 +356,5 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive); AMS previously matched `supplement`, AGU `supplemental` — a `\section{Supplement}` deck reordered in AMS but not AGU | Yes |
 | 2026-07-04 | Shared: `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` moved from `beamer_to_agu.py` to `beamer_common.py` (KP extractor now returns `[]` and PLS extractor `None` when absent; AGU applies its own defaults) | Yes |
 | 2026-07-04 | Shared: sentinel names made generic — canonical `DATA`/`COI`/`ACKS` and `%% EMAIL:` with legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS`/`%% AGU_EMAIL:` accepted indefinitely (`_SENTINEL_ALIASES` in `beamer_common.py`); internal label `OPENRESEARCH` renamed `DATA`. Output byte-identical for legacy decks (verified against pre-change code) | Yes |
+| 2026-07-07 | Shared: `_restructure_tables` added (pipeline-gap audit) — bare `tabular`/`tabular*`/`tabularx` wrapped in a `\begin{table}` float with adjacent caption (before or after the tabular) and label attached, caption emitted above; previously `\captionof{table}` became a bare `\caption{}` outside any float (LaTeX error). Caption+label lookahead factored into shared `_parse_caption` (also used by `_restructure_figures`; figure output byte-identical). AMS TC-ignores table captions like figure captions | Yes |
+| 2026-07-07 | Shared: no-`\inst{}` fallback fixed — all authors now share the single `\institute{}` text (affiliation `a`) instead of the real institute being silently replaced by per-author placeholders; placeholder only when `\institute{}` is absent too. Output byte-identical for `\inst{}`-marked decks (verified on both example decks) | Yes |

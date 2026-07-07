@@ -53,6 +53,7 @@ Usage:
 
 import argparse
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -287,6 +288,32 @@ def insert_si_label_block(text, si_labels_used):
 
 _FIGURE_ENV_RE = re.compile(r'\\begin\{figure\}.*?\\end\{figure\}', re.DOTALL)
 _INCLUDEGRAPHICS_RE = re.compile(r'\\includegraphics(\[[^\]]*\])?\{[^}]*\}')
+_INCLUDEGRAPHICS_PATH_RE = re.compile(
+    r'(\\includegraphics(?:\[[^\]]*\])?\{)([^}]+)(\})')
+
+
+def rebase_graphics_paths(text, src_dir, outdir):
+    """
+    Rewrite relative \\includegraphics paths (which resolve against src_dir,
+    where the combined .tex compiles) so they resolve from outdir instead.
+    Absolute paths are left unchanged.
+
+    Returns (new_text, n_rebased).
+    """
+    n_rebased = 0
+
+    def repl(m):
+        nonlocal n_rebased
+        path = m.group(2).strip()
+        if Path(path).is_absolute():
+            return m.group(0)
+        new_path = os.path.relpath(src_dir / path, outdir)
+        if new_path == path:
+            return m.group(0)
+        n_rebased += 1
+        return m.group(1) + new_path + m.group(3)
+
+    return _INCLUDEGRAPHICS_PATH_RE.sub(repl, text), n_rebased
 
 
 def _is_commented(text, pos):
@@ -357,11 +384,13 @@ def rewrite_figure_includes(text):
     return ''.join(out_parts), n
 
 
-def make_single_figures(main_tex_path):
+def make_single_figures(main_tex_path, n_figs):
     """Run make_single_figure.sh on main_tex_path (in its own directory),
-    producing fig1.pdf, fig2.pdf, ... beside it."""
+    producing fig1.pdf, fig2.pdf, ... beside it. n_figs is passed explicitly
+    so the script and count_figure_envs can never disagree on the count."""
     result = subprocess.run(
-        ['bash', str(MAKE_SINGLE_FIGURE.resolve()), main_tex_path.name],
+        ['bash', str(MAKE_SINGLE_FIGURE.resolve()), main_tex_path.name,
+         str(n_figs)],
         cwd=main_tex_path.parent,
     )
     if result.returncode != 0:
@@ -406,7 +435,7 @@ def inline_bbl(text, bbl_text):
 # ---------------------------------------------------------------------------
 
 def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
-                  make_figures=True, inline_bib=True):
+                  make_figures=True, inline_bib=True, no_si=False):
     """
     Write a main-text-only manuscript derived from combined_tex into outdir.
 
@@ -421,6 +450,9 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
                    \\includegraphics to figN.pdf
     inline_bib   : if True, inline the .bbl and comment out
                    \\bibliography{}/\\bibliographystyle{}
+    no_si        : the manuscript has no SI -- skip boundary detection and
+                   SI stripping, but still do the submission packaging
+                   (figure extraction, .bbl inlining, path rebasing)
 
     Returns the path to the written main.tex.
     """
@@ -441,16 +473,20 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     input_hash = hashlib.sha256(input_bytes).hexdigest()
     text = input_bytes.decode('utf-8')
 
-    si_start, how = find_si_start(text)
-    if si_start is None:
-        sys.exit(
-            'Could not locate the SI boundary: no %% SI_BEGIN sentinel, '
-            'no \\section*{Supporting Information.../\\section{Supplement...} '
-            'header, and no \\renewcommand\\thefigure{S\\arabic{figure}}. '
-            'Aborting -- nothing written.')
-    print(f'SI boundary found via {how}')
-
-    main_text = strip_si(text, si_start)
+    if no_si:
+        print('SI stripping skipped (--no-si)')
+        main_text = text
+    else:
+        si_start, how = find_si_start(text)
+        if si_start is None:
+            sys.exit(
+                'Could not locate the SI boundary: no %% SI_BEGIN sentinel, '
+                'no \\section*{Supporting Information.../\\section{Supplement...} '
+                'header, and no \\renewcommand\\thefigure{S\\arabic{figure}}. '
+                'If the manuscript has no SI, rerun with --no-si. '
+                'Aborting -- nothing written.')
+        print(f'SI boundary found via {how}')
+        main_text = strip_si(text, si_start)
 
     if aux_path.exists():
         aux_labels = parse_aux_labels(aux_path.read_text(encoding='utf-8'))
@@ -482,6 +518,16 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     for w in label_warnings:
         print(f'Warning: {w}', file=sys.stderr)
 
+    # Relative graphics paths resolve against the combined .tex's directory;
+    # main.tex lives in outdir, so rebase them or neither the figure-harness
+    # compile nor main.tex itself would find the graphics.
+    if outdir.resolve() != combined_tex.parent.resolve():
+        main_text, n_rebased = rebase_graphics_paths(
+            main_text, combined_tex.parent, outdir)
+        if n_rebased:
+            print(f'Rebased {n_rebased} relative \\includegraphics path(s) '
+                  f'to resolve from {outdir}/')
+
     outdir.mkdir(parents=True, exist_ok=True)
     out_tex.write_text(main_text, encoding='utf-8')
     print(f'Wrote {out_tex} ({len(si_labels_used)} SI ref(s) preserved via '
@@ -492,7 +538,7 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
         if n_figs == 0:
             print('No figure environments found; skipping figure extraction.')
         else:
-            make_single_figures(out_tex)
+            make_single_figures(out_tex, n_figs)
             final_text, n_rewritten = rewrite_figure_includes(
                 out_tex.read_text(encoding='utf-8'))
             out_tex.write_text(final_text, encoding='utf-8')
@@ -521,11 +567,15 @@ def main():
     parser.add_argument('--bbl', help='Combined document .bbl (default: <stem>.bbl)')
     parser.add_argument('--no-bib', action='store_true',
                          help='Skip .bbl inlining; leave \\bibliography{} live')
+    parser.add_argument('--no-si', action='store_true',
+                         help='Manuscript has no SI: skip boundary detection '
+                              'and SI stripping, do the rest of the packaging')
     args = parser.parse_args()
 
     extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,
                   make_figures=not args.no_figures,
-                  inline_bib=not args.no_bib)
+                  inline_bib=not args.no_bib,
+                  no_si=args.no_si)
 
 
 if __name__ == '__main__':

@@ -99,6 +99,52 @@ def _strip_font_size_cmds(text):
     return text
 
 
+def _parse_caption(text, i):
+    r"""
+    If text[i:] starts a \caption command (not \captionof/\captionsetup),
+    parse the optional [short] argument, the balanced {caption} argument, and
+    an immediately following \label{}, if any.
+
+    Returns (caption_content, label_cmd, end) where end is the index in text
+    after everything consumed (caption_content has font-size commands
+    stripped; label_cmd is '' or a full '\label{...}' string), or None if
+    text[i:] is not a \caption command.
+    """
+    if not text.startswith(r'\caption', i):
+        return None
+    j = i + 8
+    if j < len(text) and text[j] not in '{[ \t\n':
+        return None  # \captionof, \captionsetup, ...
+    while j < len(text) and text[j] in ' \t':
+        j += 1
+    if j < len(text) and text[j] == '[':
+        bracket_end = text.find(']', j)
+        if bracket_end == -1:
+            return None
+        j = bracket_end + 1
+        while j < len(text) and text[j] in ' \t':
+            j += 1
+    if j >= len(text) or text[j] != '{':
+        return None
+    content, j = _extract_brace_group(text, j)
+    content = _strip_font_size_cmds(content).strip()
+
+    label_cmd = ''
+    k = j
+    while k < len(text) and text[k] in ' \t\n':
+        k += 1
+    if text.startswith(r'\label', k):
+        lb = k + 6
+        while lb < len(text) and text[lb] in ' \t':
+            lb += 1
+        if lb < len(text) and text[lb] == '{':
+            lb_content, lb_end = _extract_brace_group(text, lb)
+            label_cmd = r'\label{' + lb_content + '}'
+            j = lb_end
+
+    return content, label_cmd, j
+
+
 def _convert_captionof(text):
     """
     Convert \\captionof{type}{caption text} -> \\caption{caption text}
@@ -252,10 +298,11 @@ def transform_content(content, figure_opts=None):
     Transform a single frame's content string into manuscript LaTeX.
     Returns a string of LaTeX paragraphs / figure environments.
 
-    figure_opts: dict passed to _restructure_figures to control figure format.
+    figure_opts: dict passed to _restructure_figures / _restructure_tables to
+      control float format.
       Keys: placement (str), centering (bool), noindent (bool), default_width (str|None),
       caption_tcignore (bool)
-      Defaults produce AMS-style figures: [h], \\centering, no \\noindent, caption counted.
+      Defaults produce AMS-style floats: [h], \\centering, no \\noindent, caption counted.
     """
     # --- 1. Strip font size / selection commands first ----------------------
     content = _strip_font_size_cmds(content)
@@ -299,6 +346,14 @@ def transform_content(content, figure_opts=None):
         centering=opts.get('centering', True),
         noindent=opts.get('noindent', False),
         default_width=opts.get('default_width', None),
+        caption_tcignore=opts.get('caption_tcignore', False),
+    )
+
+    # --- 4b. Tables: wrap bare tabular + \caption in a table float ----------
+    content = _restructure_tables(
+        content,
+        placement=opts.get('placement', 'h'),
+        centering=opts.get('centering', True),
         caption_tcignore=opts.get('caption_tcignore', False),
     )
 
@@ -400,45 +455,16 @@ def _restructure_figures(content, placement='h', centering=True,
                 break
 
         # Look for \caption{...} (with optional [short]) and optional \label{}
+        # (\captionof was already converted above)
         caption_cmd = ''
         label_cmd = ''
         new_cur = cur
 
-        ahead = text[cur:]
-        ws_m = re.match(r'\s*', ahead)
-        offset = ws_m.end() if ws_m else 0
-
-        # Check for \caption (but not \captionof — already converted above)
-        if ahead[offset:offset + 8] == r'\caption' and (
-                offset + 8 >= len(ahead) or ahead[offset + 8] in '{[ \t\n'):
-            cap_pos = offset + 8
-            # Skip optional whitespace and [short caption]
-            while cap_pos < len(ahead) and ahead[cap_pos] in ' \t':
-                cap_pos += 1
-            if cap_pos < len(ahead) and ahead[cap_pos] == '[':
-                bracket_end = ahead.find(']', cap_pos)
-                cap_pos = bracket_end + 1 if bracket_end != -1 else cap_pos
-                while cap_pos < len(ahead) and ahead[cap_pos] in ' \t':
-                    cap_pos += 1
-            # Extract balanced {caption text}
-            if cap_pos < len(ahead) and ahead[cap_pos] == '{':
-                cap_content, cap_end_in_ahead = _extract_brace_group(ahead, cap_pos)
-                cap_content = _strip_font_size_cmds(cap_content).strip()
-                caption_cmd = r'\caption{' + cap_content + '}'
-                new_cur = cur + cap_end_in_ahead
-
-                # Look for \label{} immediately after \caption{}
-                after_cap = ahead[cap_end_in_ahead:]
-                ws_m2 = re.match(r'\s*', after_cap)
-                lb_offset = ws_m2.end() if ws_m2 else 0
-                if after_cap[lb_offset:lb_offset + 6] == r'\label':
-                    lb_pos = lb_offset + 6
-                    while lb_pos < len(after_cap) and after_cap[lb_pos] in ' \t':
-                        lb_pos += 1
-                    if lb_pos < len(after_cap) and after_cap[lb_pos] == '{':
-                        lb_content, lb_end = _extract_brace_group(after_cap, lb_pos)
-                        label_cmd = r'\label{' + lb_content + '}'
-                        new_cur = cur + cap_end_in_ahead + lb_offset + lb_end
+        ws_m = re.match(r'\s*', text[cur:])
+        parsed_cap = _parse_caption(text, cur + (ws_m.end() if ws_m else 0))
+        if parsed_cap:
+            cap_content, label_cmd, new_cur = parsed_cap
+            caption_cmd = r'\caption{' + cap_content + '}'
 
         # Build the figure environment
         placement_str = f'[{placement}]' if placement else ''
@@ -461,6 +487,111 @@ def _restructure_figures(content, placement='h', centering=True,
 
         result.append(fig)
         pos = new_cur if (caption_cmd or label_cmd) else cur
+
+    return ''.join(result)
+
+
+_TABULAR_BEGIN_RE = re.compile(r'\\begin\{(tabular\*?|tabularx)\}')
+_TABLE_BEGIN_RE = re.compile(r'\\begin\{table\*?\}')
+_TABLE_END_RE = re.compile(r'\\end\{table\*?\}')
+
+
+def _find_env_end(text, start, env):
+    r"""
+    Index just after the \end{env} matching an already-open \begin{env}.
+    start points just past the opening \begin{env}. Handles same-name
+    nesting. Returns len(text) if unmatched.
+    """
+    tok = re.compile(r'\\(begin|end)\{' + re.escape(env) + r'\}')
+    depth = 1
+    for m in tok.finditer(text, start):
+        depth += 1 if m.group(1) == 'begin' else -1
+        if depth == 0:
+            return m.end()
+    return len(text)
+
+
+def _restructure_tables(content, placement='h', centering=True,
+                         caption_tcignore=False):
+    r"""
+    Wrap bare tabular/tabular*/tabularx blocks in a table float, mirroring
+    what _restructure_figures does for \includegraphics.  Skips tabulars
+    already inside \begin{table}...\end{table}.
+
+    Attaches an adjacent \caption{} -- immediately before the tabular
+    (separated only by whitespace) or immediately after it -- plus a
+    \label{} following the caption, and emits the caption ABOVE the tabular
+    (journal convention for tables).  \captionof was already converted to
+    \caption by _restructure_figures.
+
+    placement / centering / caption_tcignore behave as in
+    _restructure_figures.
+    """
+    text = content
+    n = len(text)
+    result = []
+    pos = 0
+
+    while pos < n:
+        tab_m = _TABULAR_BEGIN_RE.search(text, pos)
+        if tab_m is None:
+            result.append(text[pos:])
+            break
+
+        # If an existing \begin{table} comes first, pass the float through
+        table_m = _TABLE_BEGIN_RE.search(text, pos)
+        if table_m and table_m.start() < tab_m.start():
+            result.append(text[pos:table_m.start()])
+            end_m = _TABLE_END_RE.search(text, table_m.end())
+            if end_m:
+                result.append(text[table_m.start():end_m.end()])
+                pos = end_m.end()
+            else:
+                result.append(text[table_m.start():])
+                pos = n
+            continue
+
+        env = tab_m.group(1)
+        tab_end = _find_env_end(text, tab_m.end(), env)
+        tabular_block = text[tab_m.start():tab_end].strip()
+
+        caption_content = None
+        label_cmd = ''
+
+        # \caption{} immediately BEFORE the tabular (whitespace only between)
+        pre = text[pos:tab_m.start()]
+        cap_idx = pre.rfind(r'\caption')
+        if cap_idx != -1:
+            parsed = _parse_caption(pre, cap_idx)
+            if parsed and not pre[parsed[2]:].strip():
+                caption_content, label_cmd, _end = parsed
+                pre = pre[:cap_idx]
+        result.append(pre)
+
+        end_pos = tab_end
+        if caption_content is None:
+            # \caption{} immediately AFTER the tabular
+            ws_m = re.match(r'\s*', text[tab_end:])
+            parsed = _parse_caption(text, tab_end + ws_m.end())
+            if parsed:
+                caption_content, label_cmd, end_pos = parsed
+
+        placement_str = f'[{placement}]' if placement else ''
+        tbl = f'\n\\begin{{table}}{placement_str}\n'
+        if centering:
+            tbl += '  \\centering\n'
+        if caption_content is not None:
+            caption_cmd = r'\caption{' + caption_content + '}'
+            if caption_tcignore:
+                tbl += '%TC:ignore\n  ' + caption_cmd + '\n%TC:endignore\n'
+            else:
+                tbl += '  ' + caption_cmd + '\n'
+        if label_cmd:
+            tbl += '  ' + label_cmd + '\n'
+        tbl += tabular_block + '\n\\end{table}\n'
+
+        result.append(tbl)
+        pos = end_pos
 
     return ''.join(result)
 

@@ -54,10 +54,11 @@ def _parse_authors_affiliations(src):
     parsed, inst_map, inst_nums = _parse_inst_blocks(src)
 
     if not inst_nums:
-        inst_nums = list(range(1, len(parsed) + 1))
-        inst_map = {i + 1: 'Department, Institution, City, State'
-                    for i in range(len(parsed))}
-        parsed = [(name, i + 1) for i, (name, _) in enumerate(parsed)]
+        # No \inst{} markup: every author shares the single \institute{}
+        # (Beamer semantics). Placeholder only when \institute{} is absent too.
+        inst_nums = [1]
+        inst_map.setdefault(1, 'Department, Institution, City, State')
+        parsed = [(name, 1) for name, _ in parsed]
 
     inst_to_aff = {num: aff_letters[i] for i, num in enumerate(inst_nums)}
     authors = [(name, inst_to_aff.get(num, aff_letters[0]))

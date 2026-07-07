@@ -98,6 +98,8 @@ def check_agu(text):
 
     # --- citation remapping (natbib → apacite) ---
     check('citet→citeA',               text, r'\\citeA\{wheeler2004\}')
+    check('abstract citation remapped', text,
+          r'extending \\citeA\{wheeler2004\}')
     check('citep→cite',                text, r'\\cite\{madden1971\}')
     check('citep[post]→cite[post]',    text, r'\\cite\[e\.g\.,\]\{vitart2017\}')
     check('citet[pre][post]→citeA<>',  text, r'\\citeA<see>\[their Fig')
@@ -118,6 +120,12 @@ def check_agu(text):
     check('conclusions section',       text, r'\\section\{Conclusions\}')
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
+    # tabular wrapped in a table float, caption above (AGU: no [h], no centering)
+    check('table float wrapper',       text,
+          r'\\begin\{table\}\s*\\caption\{Comparison of forecast')
+    check('table label kept',          text, r'\\label\{tab:summary\}')
+    check('no bare caption after tabular', text,
+          r'\\end\{tabular\}\s*\\caption', present=False)
 
     # --- endmatter sentinels ---
     check('open research section',     text, r'\\section\*\{Open Research Section\}')
@@ -188,6 +196,12 @@ def check_manuscript(text):
     check('results section',           text, r'\\section\{Results\}')
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
+    # tabular wrapped in a table float; AMS excludes table captions from the
+    # word count, so the caption is %TC:ignore-wrapped like figure captions
+    check('table float wrapper',       text,
+          r'\\begin\{table\}\[h\]\s*\\centering\s*%TC:ignore\s*'
+          r'\\caption\{Comparison of forecast')
+    check('table label kept',          text, r'\\label\{tab:summary\}')
     check('bibliography',              text, r'\\bibliography\{refs\}')
     # bibliography must precede supplemental content (not end up after it)
     bib_pos  = text.find(r'\bibliography{refs}')
@@ -320,6 +334,113 @@ def check_sentinel_aliases_unit():
                              f'{src.strip()!r}')
 
 
+_NO_INST_SRC = r"""
+\documentclass{beamer}
+\title{No-inst Deck}
+\author{First Author and Second Author}
+\institute{Shared Institution, City}
+\begin{document}
+\begin{frame}{A}
+Text.
+\end{frame}
+\end{document}
+"""
+
+
+def check_noinst_fallback_unit():
+    r"""\author{} without \inst{} markup: all authors share the single
+    \institute{} text; the placeholder is used only when \institute{} is
+    absent too."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from beamer_to_ams import _parse_authors_affiliations
+    from beamer_to_agu import _parse_authors_affiliations_agu
+
+    authors, aff_block = _parse_authors_affiliations(_NO_INST_SRC)
+    if [aff for _, aff in authors] != ['a', 'a']:
+        _failures.append('  FAIL  no-inst AMS: both authors should share '
+                         f'aff a, got {authors}')
+    check('no-inst AMS institute kept', aff_block, r'Shared Institution, City')
+    check('no-inst AMS no placeholder', aff_block,
+          r'Department, Institution', present=False)
+
+    authors_block, aff_lines, _corr = _parse_authors_affiliations_agu(_NO_INST_SRC)
+    check('no-inst AGU shared affil 1', authors_block,
+          r'First Author\\affil\{1\} and Second Author\\affil\{1\}')
+    if len(aff_lines) != 1 or 'Shared Institution, City' not in aff_lines[0]:
+        _failures.append('  FAIL  no-inst AGU: expected one shared '
+                         f'affiliation, got {aff_lines}')
+
+
+_NO_SI_DECK = r"""
+\documentclass{beamer}
+\title{No SI Deck}
+\author{Solo Author}
+\institute{Some Institute}
+%% EMAIL: solo@example.edu
+\begin{document}
+\section{Results}
+\begin{frame}{Result}
+Body text.
+\end{frame}
+\end{document}
+"""
+
+
+def check_no_si_paths():
+    """A deck without an SI section: the AGU converter must not emit the SI
+    scaffold or %% SI_BEGIN, and extract_main --no-si must still package the
+    resulting manuscript."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        deck = Path(tmpdir) / 'no_si.tex'
+        deck.write_text(_NO_SI_DECK)
+        out = Path(tmpdir) / 'no_si_agu.tex'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'beamer_to_agu.py'), str(deck), str(out)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  no-SI AGU convert exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        text = out.read_text()
+        check('no-SI: scaffold absent', text,
+              r'Supporting Information for', present=False)
+        check('no-SI: sentinel absent', text, r'%% SI_BEGIN', present=False)
+        check('no-SI: endmatter still emitted', text,
+              r'\\section\*\{Open Research Section\}')
+
+        subdir = Path(tmpdir) / 'SUBMIT'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'), str(out),
+             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si'],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  extract_main --no-si exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        main_tex = subdir / 'main.tex'
+        if not main_tex.exists():
+            _failures.append('  FAIL  extract_main --no-si: main.tex not written')
+            return
+        check('--no-si: body preserved', main_tex.read_text(), r'Body text')
+
+
+def check_rebase_paths_unit():
+    """Relative \\includegraphics paths must be rewritten to resolve from the
+    output directory; absolute paths are untouched."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import extract_main as em
+
+    sample = (r'\includegraphics[width=\linewidth]{../plots/a.pdf}' '\n'
+              r'\includegraphics{/abs/path/b.pdf}')
+    new_text, n = em.rebase_graphics_paths(
+        sample, Path('proj/tex'), Path('proj/tex/SUB'))
+    if n != 1:
+        _failures.append(f'  FAIL  rebase_graphics_paths: expected 1 rebased, got {n}')
+    check('rebase relative path', new_text, r'\{\.\./\.\./plots/a\.pdf\}')
+    check('rebase keeps options', new_text, r'\[width=\\linewidth\]\{\.\./\.\./plots/a\.pdf\}')
+    check('rebase leaves absolute', new_text, r'\{/abs/path/b\.pdf\}')
+
+
 def check_figure_rewrite_unit():
     sys.path.insert(0, str(SCRIPTS_DIR))
     import extract_main as em
@@ -423,16 +544,23 @@ def main():
         print('  all checks passed')
 
     # --- extract_main.py: \includegraphics rewrite (unit test) ---
-    print('\n=== extract_main figure rewrite (unit) ===')
-    before = len(_failures)
-    check_figure_rewrite_unit()
-    new_failures = _failures[before:]
-    if new_failures:
-        for msg in new_failures:
-            print(msg)
-        total_fail += len(new_failures)
-    else:
-        print('  all checks passed')
+    unit_sections = [
+        ('extract_main figure rewrite (unit)', check_figure_rewrite_unit),
+        ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),
+        ('no-SI conversion + --no-si (e2e)', check_no_si_paths),
+        ('graphics path rebasing (unit)', check_rebase_paths_unit),
+    ]
+    for section, fn in unit_sections:
+        print(f'\n=== {section} ===')
+        before = len(_failures)
+        fn()
+        new_failures = _failures[before:]
+        if new_failures:
+            for msg in new_failures:
+                print(msg)
+            total_fail += len(new_failures)
+        else:
+            print('  all checks passed')
 
     print(f'\n{"All tests passed." if total_fail == 0 else f"{total_fail} failure(s) total."}')
     sys.exit(0 if total_fail == 0 else 1)

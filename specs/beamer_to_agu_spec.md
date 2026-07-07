@@ -44,7 +44,10 @@ Output postamble includes: `\section*{Open Research Section}`,
 SI header, `\end{document}`. The SI header begins with a `%% SI_BEGIN`
 comment sentinel marking the SI boundary, consumed by
 `extract_main.py` (`specs/extract_main_spec.md`) when splitting out a
-main-text-only manuscript.
+main-text-only manuscript. The SI scaffold (sentinel, cover page,
+"Contents of this file" checklist) is emitted **only when the deck has a
+Supplemental section**; a no-SI deck ends after the bibliography (use
+`extract_main.py --no-si` on such a manuscript).
 
 `%TC:ignore` / `%TC:endignore` markers are inserted for `texcount` compatibility:
 - Title block (title → key points): ignored
@@ -98,7 +101,10 @@ comma-separated English list (`_AUTHOR_SEP_RE`), so both
 ### 4.3 Citation remapping (`_remap_citations_to_apacite`)
 
 The Beamer source uses `natbib` commands; AGU requires `apacite`.
-Applied as a final pass over the manuscript body:
+Applied as a final pass over the manuscript body, **and** separately to the
+abstract, Plain Language Summary, and key points extracted into the preamble
+(they bypass the body-wide pass; previously `\citet`/`\citep` in an abstract
+survived as undefined commands under `apacite`):
 
 | natbib | apacite | Notes |
 |--------|---------|-------|
@@ -132,6 +138,11 @@ AGU figures use different conventions from AMS, controlled via
 - `\noindent` prefixed to each `\includegraphics`.
 - `[width=\textwidth]` added only when the `\includegraphics` has no existing
   options; existing width options are preserved.
+
+Bare `tabular`/`tabular*`/`tabularx` blocks are wrapped in `\begin{table}`
+floats by the shared `_restructure_tables` (same placement/centering options
+as figures; adjacent `\caption{}` before or after the tabular attached and
+emitted above it — see `beamer_to_ams_spec.md` §4.6 step 6b).
 
 ### 4.6 Passthrough filter
 
@@ -271,8 +282,10 @@ exclusions, and the 12 PU limit for GRL letters).
 | `\bibliographystyle{...}` in source | Dropped from passthrough events (`keep_bibliographystyle=False`) |
 | `\includegraphics[width=X]` already has options | `default_width` not applied; existing options preserved |
 | Equation already in `linenomath*` | `_wrap_equations_linenomath` counts open/close tags; skips if already inside |
-| No `\institute{}` in source | Falls back to per-author `Department, Institution, City, Country` placeholder |
-| `\author` without `\inst{}` markers | Authors assigned sequential numbers; single `\affiliation{1}{...}` placeholder |
+| `\author` without `\inst{}` markers | All authors share `\affil{1}` with the single `\institute{}` text (Beamer semantics: one institute applies to all authors) |
+| No `\institute{}` in source (and no `\inst{}`) | All authors share one `\affiliation{1}{Department, Institution, City, Country}` placeholder |
+| Bare `tabular` with adjacent `\captionof{table}{...}` | Wrapped in `\begin{table}` with caption above and `\label{}` attached (`_restructure_tables`, shared) |
+| Citations in abstract / PLS / key points | Remapped to apacite (separate pass; extracted front matter bypasses the body-wide remap) |
 | `\bibliography{...}` inside a frame | Stripped by `transform_content`; postamble uses bib name extracted from source |
 | `\bibliographystyle{...}` inside a frame | Stripped by `transform_content`; prevents duplicate `\bibstyle` BibTeX error |
 | `\fig{path}` macro | Expanded to `\includegraphics{path}` in `preprocess_body` (slide size options dropped) |
@@ -285,7 +298,7 @@ exclusions, and the 12 PU limit for GRL letters).
 | Missing sentinel block | Per-section stub (`_STUBS[label]`) used; other sentinel blocks are unaffected |
 | Sentinels inside a frame body (not wrapping a frame) | `strip_frame_wrappers` finds no frame wrappers; content returned as-is |
 | End-matter after `\section{Supplemental…}` in source | Reordered to appear before Supplemental in output (`is_si_section` shared matcher: `supplement` or `supporting information`, case-insensitive) |
-| No Supplemental section | SI checklist counts stay 0; all three items commented out |
+| No Supplemental section | SI scaffold not emitted at all (no `%% SI_BEGIN`, no cover page, no checklist); output ends with endmatter + bibliography |
 | SI has figures but no `\fig{}`| Falls back to counting `\includegraphics{` in SI frame content |
 | SI has tables via `\begin{table}` only (no `tabular`) | Falls back to counting `\begin{table` if `\begin{tabular` count is 0 |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
@@ -326,3 +339,6 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-07-04 | Shared: `_extract_sentinel_block`, `_strip_frame_wrappers`, `_extract_email`, `_extract_key_points`, `_extract_plain_language_summary` moved to `beamer_common.py` as `extract_sentinel_block`, `strip_frame_wrappers`, `extract_email`, `extract_key_points`, `extract_plain_language_summary` (now also used by the AMS converter). Return-value change: KP extractor returns `[]` and PLS extractor `None` when the section is absent; AGU applies `_KP_DEFAULTS`/placeholder itself. AGU output byte-identical before/after (verified on tests/test_input.tex) | Yes |
 | 2026-07-04 | Shared: SI section matching unified as `is_si_section` in `beamer_common.py` (`supplement` \| `supporting information`, case-insensitive; previously AGU matched only `supplemental` — a `\section{Supplement}` or `\section{Supporting Information}` deck was silently not reordered) | Yes |
 | 2026-07-04 | Shared: sentinel names made generic — canonical `DATA`/`COI`/`ACKS` and `%% EMAIL:` with legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS`/`%% AGU_EMAIL:` accepted indefinitely (`_SENTINEL_ALIASES` in `beamer_common.py`); `_STUBS`/`_SENTINEL_HEADERS` keys renamed `OPENRESEARCH` → `DATA`. Output byte-identical for legacy decks | Yes |
+| 2026-07-07 | Citation remap extended to extracted front matter (pipeline-gap audit): abstract, PLS, and key points are run through `_remap_citations_to_apacite` after extraction — previously natbib commands there survived as undefined under `apacite` (compile error) | Yes |
+| 2026-07-07 | SI scaffold made conditional: `%% SI_BEGIN` + cover page + checklist emitted only when the deck has a Supplemental section; no-SI decks previously got a stray SI cover page in the combined PDF | Yes |
+| 2026-07-07 | Shared: `_restructure_tables` (table floats) and no-`\inst{}` fallback fix — see `beamer_to_ams_spec.md` sync log 2026-07-07 for details. Output byte-identical for both example decks | Yes |

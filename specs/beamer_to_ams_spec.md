@@ -61,7 +61,23 @@ effect on `-sum`):
   (`_restructure_figures`/`_restructure_tables`, gated by the
   `caption_tcignore` option threaded through `figure_opts`; AMS sets
   `_AMS_FIGURE_OPTS = {'caption_tcignore': True}`, AGU leaves it `False` so
-  its captions still count per AGU's rule).
+  its captions still count per AGU's rule) — **except** captions inside the
+  Supplemental Information section (see below), which must not get this
+  per-caption wrapping.
+- texcount's `%TC:ignore`/`%TC:endignore` markers are an on/off **toggle**,
+  not a nesting counter: a `%TC:endignore` while already ignoring turns
+  ignoring off, even if it was meant to close an "inner" pair. SI content
+  already sits inside the outer SI `%TC:ignore` (see below), so if its
+  figures/tables were also given the per-caption `caption_tcignore`
+  wrapping, the first caption's `%TC:endignore` would flip ignoring off
+  mid-SI and desync the toggle from the actual `\begin{figure}`/`\end{figure}`
+  pairs for the rest of the document — texcount then reports `Environment
+  \begin{document} ended with \end{figure}` and a stray `%TC:endignore
+  without corresponding %TC:ignore` (found 2026-07-08). Fixed by splitting
+  the event list at the `%% SI_BEGIN` marker (`convert()`) and assembling
+  the SI portion with `figure_opts={'caption_tcignore': False}` — SI figures
+  get no per-caption ignore markers since the outer SI ignore already covers
+  them.
 - Endmatter: the `\acknowledgments` + `\datastatement` block is wrapped in
   its own `%TC:ignore`/`%TC:endignore` pair — AMS's word-limit rule excludes
   acknowledgments and the data availability statement.
@@ -174,6 +190,13 @@ case-insensitive — one matcher for both converters, consistent with
   3. The `\section{Supplemental…}` event is stripped (its following frame events
      remain, so the SI content appears after `\clearpage`).
   4. Postamble is reduced to `\end{document}`.
+  5. The event list is split at the `%% SI_BEGIN` passthrough marker: events
+     before and including it (`main_events`) are assembled with
+     `_AMS_FIGURE_OPTS` (`caption_tcignore=True`, per-caption ignore
+     wrapping); events after it (`si_events`, the SI frames themselves) are
+     assembled separately with `caption_tcignore=False`, since they already
+     sit inside the outer SI `%TC:ignore` block opened in step 2 — see the
+     toggle-desync note under §3.
 
 This ensures references always precede supplemental content in the output, mirroring
 the explicit reorder logic in `beamer_to_agu.py`. The `%% SI_BEGIN` comment
@@ -358,3 +381,4 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-04 | Shared: sentinel names made generic — canonical `DATA`/`COI`/`ACKS` and `%% EMAIL:` with legacy `AGU_OPENRESEARCH`/`AGU_COI`/`AGU_ACKS`/`%% AGU_EMAIL:` accepted indefinitely (`_SENTINEL_ALIASES` in `beamer_common.py`); internal label `OPENRESEARCH` renamed `DATA`. Output byte-identical for legacy decks (verified against pre-change code) | Yes |
 | 2026-07-07 | Shared: `_restructure_tables` added (pipeline-gap audit) — bare `tabular`/`tabular*`/`tabularx` wrapped in a `\begin{table}` float with adjacent caption (before or after the tabular) and label attached, caption emitted above; previously `\captionof{table}` became a bare `\caption{}` outside any float (LaTeX error). Caption+label lookahead factored into shared `_parse_caption` (also used by `_restructure_figures`; figure output byte-identical). AMS TC-ignores table captions like figure captions | Yes |
 | 2026-07-07 | Shared: no-`\inst{}` fallback fixed — all authors now share the single `\institute{}` text (affiliation `a`) instead of the real institute being silently replaced by per-author placeholders; placeholder only when `\institute{}` is absent too. Output byte-identical for `\inst{}`-marked decks (verified on both example decks) | Yes |
+| 2026-07-08 | `convert()` now splits the event list at the `%% SI_BEGIN` marker and assembles the SI portion with `caption_tcignore=False`; previously SI figures/tables got the same per-caption `%TC:ignore`/`%TC:endignore` wrapping as main-body ones, which desynced texcount's ignore toggle from the outer SI ignore block and produced a bogus `\begin{document}`/`\end{figure}` environment-mismatch error plus a stray trailing `%TC:endignore` (real-world repro: `hdd-slides-v5.tex`, 22 figures + SI). Verified with a toggle/environment-stack simulation and a clean `texcount` run, both on the full manuscript and after `extract_main.py --no-si` | Yes |

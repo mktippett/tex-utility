@@ -292,15 +292,35 @@ def convert(input_path, output_path):
         events = [e for e in events
                   if not (e[1] == 'section' and is_si_section(e[2]))]
         postamble = '%TC:endignore\n' + r'\end{document}' + '\n'
+        # Everything from the SI_BEGIN marker onward already sits inside the
+        # outer %TC:ignore/%TC:endignore region opened above. texcount's
+        # ignore markers are an on/off toggle, not a nesting counter, so
+        # wrapping individual SI captions in their own %TC:ignore pair (as
+        # _AMS_FIGURE_OPTS does for main-body figures) would flip the
+        # toggle back off mid-SI and desync it from the actual
+        # \begin{figure}/\end{figure} pairs. Split events at the marker and
+        # assemble the SI portion without per-caption ignore wrapping.
+        si_marker_idx = next(
+            i for i, e in enumerate(events)
+            if e[1] == 'passthrough' and 'SI_BEGIN' in e[2]
+        )
+        main_events = events[:si_marker_idx + 1]
+        si_events = events[si_marker_idx + 1:]
     else:
         postamble = endmatter + '\n\n' + _build_postamble(bib_style, bib_file)
+        main_events = events
+        si_events = []
 
     if not events:
         print("Warning: no frames or sections found; writing body as-is.",
               file=sys.stderr)
         manuscript_body = transform_content(body, figure_opts=_AMS_FIGURE_OPTS)
     else:
-        manuscript_body = assemble_body(events, figure_opts=_AMS_FIGURE_OPTS)
+        manuscript_body = assemble_body(main_events, figure_opts=_AMS_FIGURE_OPTS)
+        if si_events:
+            si_body = assemble_body(si_events, figure_opts={'caption_tcignore': False})
+            if si_body.strip():
+                manuscript_body += '\n\n' + si_body
 
     pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,

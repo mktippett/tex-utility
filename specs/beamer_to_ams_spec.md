@@ -36,9 +36,16 @@ Output preamble includes: `\title{}`, `\authors{}` (corresponding-author
 email from the `%% EMAIL:` sentinel, shared with the AGU converter; legacy
 `%% AGU_EMAIL:` accepted; placeholder if absent), `\affiliation{}`,
 `\abstract{}` (populated from
-`\section{Abstract}` frame content), a commented `% \journal{...}` directive
-(see §4.1b), and — after `\maketitle` — a commented `%\statement` block
-(see §4.8).
+`\section{Abstract}` frame content), and — after `\maketitle` — a commented
+`%\statement` block (see §4.8).
+
+No journal-name/journal-key directive is emitted at all: AMS removed the
+per-journal macro from `ametsoc.cls` in package v5.0 (2020; see
+`ams/AMS LaTeX Package V6.1/README.txt`, "Removed option to select journal
+name for two-column") and neither `ametsocV6.1.cls` nor `templateV6.1.tex`
+retains any journal-selection command, live or commented. This differs from
+AGU, where `\journalname{}` is a real, live macro (see §4.1b history below
+and `specs/beamer_to_agu_spec.md`).
 
 Endmatter (`\acknowledgments` + `\datastatement`, see §4.9) is emitted
 immediately before the bibliography in both postamble variants:
@@ -118,31 +125,6 @@ effect on `-sum`):
    - `\affiliation{\n  \aff{a}{text}\\\n  \aff{b}{text}\n}`
    First author is assumed corresponding; abbreviated name uses initials
    for all words except the last (`_abbreviate_name`).
-
-### 4.1b Journal key (`_extract_journal_name`, `--journal`)
-
-`_extract_journal_name(src)` matches a commented directive in the Beamer
-source, `%\journal{jcli}`, on the raw source (before sentinel/body
-stripping). The CLI `--journal KEY` flag overrides it. Either source feeds
-`_build_preamble`'s `journal` parameter, which substitutes the key into the
-commented placeholder line:
-
-```latex
-% \journal{<key>}  % uncomment if using full ametsoc submission package
-```
-
-This directive is **always emitted commented-out**, regardless of whether a
-journal key was supplied — unlike AGU's live `\journalname{}` (see
-`specs/beamer_to_agu_spec.md`). `\journal{}` is undefined in the standalone
-`ametsocV6.1.cls` this converter targets (confirmed: zero `\journal`
-definitions in `ams/ametsocV6.1.cls`; a live `\journal{jcli}` line raises
-"Undefined control sequence" under `pdflatex` and leaks the literal text
-`jcli` into the typeset body) — it is only meaningful under AMS's full
-manuscript-submission package, which this repo does not ship. Supplying a
-key only pre-fills the placeholder for an author who later switches to that
-package; it is a no-op otherwise. Mirrors AGU's sentinel/CLI mechanism for
-author convenience, but the two converters differ in whether the resulting
-line is live, by real class-file necessity, not a style choice.
 
 ### 4.2 Body preprocessing
 
@@ -386,8 +368,6 @@ bibliography in both postamble variants (§4.5).
 | `\section{Abstract}` | Consumed into `\abstract{}` preamble block; removed from body |
 | `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
-| `%\journal{...}` sentinel present, or `--journal KEY` passed | Key substituted into the commented `% \journal{<key>}` placeholder; the directive stays commented (`\journal{}` undefined in `ametsocV6.1.cls` — see §4.1b) |
-| No `%\journal{...}` sentinel and no `--journal` | Commented placeholder uses the generic example key `jcli` |
 
 ---
 
@@ -438,4 +418,5 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-07 | Shared: no-`\inst{}` fallback fixed — all authors now share the single `\institute{}` text (affiliation `a`) instead of the real institute being silently replaced by per-author placeholders; placeholder only when `\institute{}` is absent too. Output byte-identical for `\inst{}`-marked decks (verified on both example decks) | Yes |
 | 2026-07-08 | `convert()` now splits the event list at the `%% SI_BEGIN` marker and assembles the SI portion with `caption_tcignore=False`; previously SI figures/tables got the same per-caption `%TC:ignore`/`%TC:endignore` wrapping as main-body ones, which desynced texcount's ignore toggle from the outer SI ignore block and produced a bogus `\begin{document}`/`\end{figure}` environment-mismatch error plus a stray trailing `%TC:endignore` (real-world repro: `hdd-slides-v5.tex`, 22 figures + SI). Verified with a toggle/environment-stack simulation and a clean `texcount` run, both on the full manuscript and after `extract_main.py --no-si` | Yes |
 | 2026-07-13 | Added `_build_si_titlepage`: a manual "Supplemental material for:" title page (title/authors/affiliations/corresponding author, styled after `\@maketitle`) now emitted after `%% SI_BEGIN`/`%TC:ignore`, before the first SI figure — previously the SI began right after the bibliography with zero visual indication of the transition. `\maketitle` cannot be called twice (self-destructs in `ametsocV6.1.cls`), so the block is hand-built rather than reusing it. Appendices remain out of scope (author-driven `\appendix`, not this converter). Verified: compiled clean with `pdflatex`+`bibtex` against the real AMS class (screenshot-matched to a published example), `texcount` balance clean, `extract_main.py` correctly strips the whole title page for a main-only submission and re-closes the orphaned `%TC:ignore` | Yes |
-| 2026-07-13 | Added `_extract_journal_name` + `--journal` CLI flag, mirroring AGU's `%\journalname{}`/`--journal` mechanism for coherence between the two converters. Initial implementation made `\journal{}` live (uncommented) when a key was supplied — caught by a real `pdflatex` compile against `ams/ametsocV6.1.cls` before commit: `\journal{}` is undefined in that standalone class (zero definitions found), raising "Undefined control sequence" and leaking the key text into the typeset body. Fixed: the directive now always stays commented (`% \journal{<key>}`); a supplied key only substitutes into the placeholder, never goes live. See §4.1b | Yes |
+| 2026-07-13 | Added `_extract_journal_name` + `--journal` CLI flag, mirroring AGU's `%\journalname{}`/`--journal` mechanism for coherence between the two converters. Initial implementation made `\journal{}` live (uncommented) when a key was supplied — caught by a real `pdflatex` compile against `ams/ametsocV6.1.cls` before commit: `\journal{}` is undefined in that standalone class (zero definitions found), raising "Undefined control sequence" and leaking the key text into the typeset body. Fixed to keep the directive always commented (`% \journal{<key>}`). **Reverted later same day** (see next row) once the underlying premise turned out to be false. | Yes, then reverted |
+| 2026-07-13 | Reverted the above: removed `_extract_journal_name`, the `journal` param/CLI flag, and the commented `\journal{}` placeholder entirely (also reverted the `--journal` threading briefly added to `convert.py`'s `ams` branch, and the sentinel line added to `examples/starter-slides.tex`). Root cause, found while investigating why `--journal` had no visible effect: `\journal{}` isn't merely undefined in *this* standalone class — AMS deleted the per-journal-name macro from `ametsoc.cls` entirely in package v5.0 (2020; `ams/AMS LaTeX Package V6.1/README.txt`: "Removed option to select journal name for two-column"), and an even older per-journal command (`\bams` et al., pre-2014) is also long gone. Neither the current `.cls` nor `templateV6.1.tex` has any journal-selection command to eventually target, commented or otherwise — unlike AGU's `\journalname{}`, which is real and live. A commented placeholder with nothing to uncomment into was judged not worth keeping; user confirmed via explicit choice ("Remove entirely") over keeping it as an inert placeholder or a plain non-macro comment. | Yes |

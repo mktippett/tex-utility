@@ -126,32 +126,15 @@ def _build_si_titlepage(title, authors, aff_block, email):
 # AMS-specific: preamble and postamble
 # ---------------------------------------------------------------------------
 
-def _extract_journal_name(src):
-    """
-    Return AMS journal key from a commented directive in the Beamer source, e.g.:
-      %\\journal{jcli}
-    Returns None if not found, in which case the preamble keeps \\journal{}
-    commented out (ametsocV6.1.cls does not require it).
-    """
-    m = re.search(r'^%\\journal\{([^}]+)\}', src, re.MULTILINE)
-    return m.group(1) if m else None
-
-
 def _build_preamble(title, authors_block, affiliation_block, abstract_text,
-                    statement_block, journal=None,
+                    statement_block,
                     pkg_ams=r'\usepackage{amsmath,amssymb}'):
-    # \journal{} is undefined in the standalone ametsocV6.1.cls this converter
-    # targets (confirmed: grep of ams/ametsocV6.1.cls has zero \journal
-    # definitions, and emitting it live raises "Undefined control sequence"
-    # and leaks the argument text into the typeset body). It is only valid
-    # under AMS's full manuscript-submission package, which this repo does
-    # not ship. So -- unlike AGU's live \journalname{} -- this directive
-    # always stays commented; a sentinel/--journal value only substitutes
-    # into the commented placeholder for the author to uncomment if they
-    # ever switch to that package.
-    journal_key = journal or 'jcli'
-    journal_line = (r'% \journal{' + journal_key
-                     + '}  % uncomment if using full ametsoc submission package')
+    # No \journal{}-equivalent directive: AMS removed the per-journal
+    # macro from ametsoc.cls in package v5.0 (2020) -- see
+    # ams/AMS LaTeX Package V6.1/README.txt, "Removed option to select
+    # journal name for two-column". Neither the current standalone
+    # ametsocV6.1.cls nor templateV6.1.tex has any journal-selection
+    # command left to target, live or commented.
     return rf"""\documentclass{{ametsocV6.1}}
 
 %% AMS packages (ametsoc.sty is already loaded by the class)
@@ -159,12 +142,6 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 {pkg_ams}
 \usepackage{{natbib}}
 \usepackage{{caption}}
-
-%% AMS journal key -- \journal{{}} is undefined in this standalone class and
-%% must stay commented; only relevant under the full ametsoc submission
-%% package. Set via %\journal{{...}} in the Beamer source, or --journal on
-%% the command line, to pre-fill the key below.
-{journal_line}
 
 \begin{{document}}
 
@@ -279,7 +256,7 @@ def _build_postamble(bib_style, bib_file):
 # Main converter
 # ---------------------------------------------------------------------------
 
-def convert(input_path, output_path, journal=None):
+def convert(input_path, output_path):
     src = Path(input_path).read_text(encoding='utf-8')
 
     title_text = _extract_preamble_arg(src, 'title') or 'TITLE'
@@ -404,9 +381,8 @@ def convert(input_path, output_path, journal=None):
                 manuscript_body += '\n\n' + si_body
 
     pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
-    journal_name = journal or _extract_journal_name(src)
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,
-                               statement_block, journal=journal_name, pkg_ams=pkg_ams)
+                               statement_block, pkg_ams=pkg_ams)
     out = preamble + '\n' + manuscript_body + '\n' + postamble
     Path(output_path).write_text(out, encoding='utf-8')
     print(f"Written: {output_path}")
@@ -421,9 +397,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('input', help='Beamer .tex file')
     parser.add_argument('output', nargs='?', help='Output .tex file (default: <input>_manuscript.tex)')
-    parser.add_argument('--journal', metavar='KEY',
-                        help='AMS journal key for \\journal{}; overrides %%\\journal{} in source')
     args = parser.parse_args()
 
     output_file = args.output or str(Path(args.input).stem) + '_manuscript.tex'
-    convert(args.input, output_file, journal=args.journal)
+    convert(args.input, output_file)

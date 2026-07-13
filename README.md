@@ -260,7 +260,12 @@ override the defaults.
 - `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and
   injected into the postamble (works regardless of whether they appear inside or outside a frame)
 - `\section{Supplemental…}` is reordered: bibliography + `\clearpage` are injected
-  before it so references always precede SI content (mirrors AGU behavior)
+  before it so references always precede SI content (mirrors AGU behavior).
+  A manual "Supplemental material for:" title page (title/authors/affiliations/
+  corresponding author, styled after the AMS `\@maketitle` layout) is then
+  emitted before the SI content itself, since `\maketitle` cannot be called a
+  second time (appendices remain an author-driven `\appendix` choice, out of
+  scope for this converter)
 - `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation/
   abstract block ignored, every figure/table caption ignored, endmatter
   (acknowledgments + data statement) ignored, SI ignored — AMS's word-limit

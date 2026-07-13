@@ -211,6 +211,20 @@ def check_manuscript(text):
     elif not (bib_pos < si_pos):
         _failures.append('  FAIL  bib-before-SI: \\bibliography{} appears AFTER supplemental content')
 
+    # --- Supplemental material title page (mirrors AGU's SI header) ---
+    check('SI titlepage heading',      text, r'Supplemental material for:')
+    check('SI titlepage title',        text, r'Full Test Title for Conversion Scripts')
+    check('SI titlepage authors',      text,
+          r'Author One\\aff\{a\}, Author Two\\aff\{b\}, and Author Three\\aff\{a\}')
+    check('SI titlepage corr author',  text, r'Corresponding author\}: Author One, author@university\.edu')
+    check('SI titlepage page reset',   text, r'\\setcounter\{page\}\{1\}')
+    si_title_pos = text.find('Supplemental material for:')
+    if si_title_pos == -1 or bib_pos == -1 or si_pos == -1:
+        _failures.append('  FAIL  SI-titlepage-order: markers not found for ordering check')
+    elif not (bib_pos < si_title_pos < si_pos):
+        _failures.append('  FAIL  SI-titlepage-order: title page must sit between '
+                         '\\bibliography{} and the SI content')
+
     # --- no AGU-specific transforms ---
     check('no \\citeA',                text, r'\\citeA\{',         present=False)
     check('no linenomath',             text, r'linenomath',         present=False)

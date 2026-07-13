@@ -186,9 +186,36 @@ case-insensitive — one matcher for both converters, consistent with
      \bibliography{<file>}
      \clearpage
      %% SI_BEGIN
+     %TC:ignore
+     \setcounter{page}{1}
+     \begin{center}
+     {\large\bfseries Supplemental material for:\par}
+     \vskip 12pt
+     {\large\bfseries <title>\par}
+     \vskip 12pt
+     {\normalsize <authors with \aff{} letters>\par}
+     \vskip 6pt
+     {\it <affiliations, one per \aff{} letter>\par}
+     \end{center}
+     \vskip 12pt
+     \noindent{\it Corresponding author}: <first author full name>, <email>
+     \clearpage
      ```
+     The title page is built by `_build_si_titlepage(title, authors, aff_block,
+     email)`, reusing the same `title_text`, `authors` (`(name, letter)` list from
+     `_parse_authors_affiliations`), `affiliation_block`, and `email` already
+     computed for the main title page — no re-parsing. `\maketitle` cannot be
+     reused for this second title page: `ametsocV6.1.cls` does
+     `\global\let\maketitle\relax`/`\global\let\@maketitle\relax` at the end of
+     its first (and only) call, so the layout is hand-built to mirror
+     `\@maketitle` (title in bold, authors normal weight, affiliations italic,
+     all centered). Mirrors `beamer_to_agu.py`'s `_build_si_header`, styled after
+     the AMS title page rather than AGU's SI header/checklist. Sits inside the
+     `%TC:ignore` opened here (word-count exempt, like the main title page).
+     Appendices are explicitly out of scope for this converter — an author
+     chooses `\appendix` commands manually; nothing here builds one.
   3. The `\section{Supplemental…}` event is stripped (its following frame events
-     remain, so the SI content appears after `\clearpage`).
+     remain, so the SI content appears after the title page's trailing `\clearpage`).
   4. Postamble is reduced to `\end{document}`.
   5. The event list is split at the `%% SI_BEGIN` passthrough marker: events
      before and including it (`main_events`) are assembled with
@@ -321,7 +348,7 @@ bibliography in both postamble variants (§4.5).
 | `\includegraphics` already in `\begin{figure}` | `_restructure_figures` detects existing figure env and passes it through unchanged |
 | `\bibliographystyle`/`\bibliography` inside a frame | Stripped by `transform_content`; postamble uses values extracted from raw source, so inside-frame location is harmless |
 | `\bibliographystyle`/`\bibliography` outside a frame | Same: extracted from raw source, not from passthrough events |
-| `\section{Supplemental}` (or `Supplement…`, `Supporting Information…`) present | Endmatter + bibliography injected before it as a passthrough event (`is_si_section` shared matcher); supplemental section marker stripped; `\clearpage` separates references from SI content; postamble = `\end{document}` only |
+| `\section{Supplemental}` (or `Supplement…`, `Supporting Information…`) present | Endmatter + bibliography injected before it as a passthrough event (`is_si_section` shared matcher); supplemental section marker stripped; `\clearpage`, `%% SI_BEGIN`, then a manual "Supplemental material for:" title page (`_build_si_titlepage`) separate references from SI content; postamble = `\end{document}` only |
 | No endmatter sentinels in source (either spelling) | Endmatter emitted with stub placeholders (`_ENDMATTER_STUBS`) |
 | No `%% EMAIL:` (or legacy `%% AGU_EMAIL:`) sentinel | `\correspondingauthor{}` uses `email@institution.edu` placeholder |
 | No Key points / PLS sections | Key points: nothing to drop; `%\statement` block emitted with placeholder text |
@@ -382,3 +409,4 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-07 | Shared: `_restructure_tables` added (pipeline-gap audit) — bare `tabular`/`tabular*`/`tabularx` wrapped in a `\begin{table}` float with adjacent caption (before or after the tabular) and label attached, caption emitted above; previously `\captionof{table}` became a bare `\caption{}` outside any float (LaTeX error). Caption+label lookahead factored into shared `_parse_caption` (also used by `_restructure_figures`; figure output byte-identical). AMS TC-ignores table captions like figure captions | Yes |
 | 2026-07-07 | Shared: no-`\inst{}` fallback fixed — all authors now share the single `\institute{}` text (affiliation `a`) instead of the real institute being silently replaced by per-author placeholders; placeholder only when `\institute{}` is absent too. Output byte-identical for `\inst{}`-marked decks (verified on both example decks) | Yes |
 | 2026-07-08 | `convert()` now splits the event list at the `%% SI_BEGIN` marker and assembles the SI portion with `caption_tcignore=False`; previously SI figures/tables got the same per-caption `%TC:ignore`/`%TC:endignore` wrapping as main-body ones, which desynced texcount's ignore toggle from the outer SI ignore block and produced a bogus `\begin{document}`/`\end{figure}` environment-mismatch error plus a stray trailing `%TC:endignore` (real-world repro: `hdd-slides-v5.tex`, 22 figures + SI). Verified with a toggle/environment-stack simulation and a clean `texcount` run, both on the full manuscript and after `extract_main.py --no-si` | Yes |
+| 2026-07-13 | Added `_build_si_titlepage`: a manual "Supplemental material for:" title page (title/authors/affiliations/corresponding author, styled after `\@maketitle`) now emitted after `%% SI_BEGIN`/`%TC:ignore`, before the first SI figure — previously the SI began right after the bibliography with zero visual indication of the transition. `\maketitle` cannot be called twice (self-destructs in `ametsocV6.1.cls`), so the block is hand-built rather than reusing it. Appendices remain out of scope (author-driven `\appendix`, not this converter). Verified: compiled clean with `pdflatex`+`bibtex` against the real AMS class (screenshot-matched to a published example), `texcount` balance clean, `extract_main.py` correctly strips the whole title page for a main-only submission and re-closes the orphaned `%TC:ignore` | Yes |

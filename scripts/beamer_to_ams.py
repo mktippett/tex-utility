@@ -74,6 +74,54 @@ def _parse_authors_affiliations(src):
     return authors, aff_block
 
 
+def _build_si_titlepage(title, authors, aff_block, email):
+    r"""
+    Build a manual "Supplemental material for:" title page, mirroring AMS's
+    own \@maketitle layout (ametsocV6.1.cls) since \maketitle self-destructs
+    after the first call (\global\let\maketitle\relax) and cannot be reused
+    for the SI. Analogous to beamer_to_agu.py's _build_si_header(), but styled
+    after the AMS title page rather than AGU's SI header.
+
+    authors  : [(name_str, aff_letter), ...] from _parse_authors_affiliations;
+               first author is corresponding.
+    aff_block: the \affiliation{ \aff{a}{...}\\ \aff{b}{...} } string from
+               _parse_authors_affiliations.
+    """
+    last = len(authors) - 1
+    author_parts = []
+    for idx, (name, letter) in enumerate(authors):
+        part = name + r'\aff{' + letter + '}'
+        if idx != last:
+            part += ','
+        if idx == last and last > 0:
+            part = 'and ' + part
+        author_parts.append(part)
+    authors_line = ' '.join(author_parts)
+
+    aff_entries = re.findall(r'\\aff\{([a-z])\}\{([^}]+)\}', aff_block)
+    aff_lines = [r'\aff{' + letter + '}' + re.sub(r'\s+', ' ', text).strip()
+                 for letter, text in aff_entries]
+    aff_block_text = '\\\\\n'.join(aff_lines)
+
+    corr_name = authors[0][0] if authors else 'First Last'
+
+    return '\n'.join([
+        r'\setcounter{page}{1}',
+        r'\begin{center}',
+        r'{\large\bfseries Supplemental material for:\par}',
+        r'\vskip 12pt',
+        r'{\large\bfseries ' + title + r'\par}',
+        r'\vskip 12pt',
+        r'{\normalsize ' + authors_line + r'\par}',
+        r'\vskip 6pt',
+        r'{\it ' + aff_block_text + r'\par}',
+        r'\end{center}',
+        r'\vskip 12pt',
+        r'\noindent{\it Corresponding author}: ' + corr_name + ', ' + email,
+        r'\clearpage',
+    ])
+
+
 # ---------------------------------------------------------------------------
 # AMS-specific: preamble and postamble
 # ---------------------------------------------------------------------------
@@ -288,6 +336,12 @@ def convert(input_path, output_path):
         # region here; extract_main.py closes/rebalances it when it later
         # strips the SI back out for a main-only submission.
         bib_lines.append(r'%TC:ignore')
+        # Supplemental material title page (title/authors/affiliations),
+        # mirroring beamer_to_agu.py's _build_si_header -- otherwise the SI
+        # starts right after the bibliography with no indication of what's
+        # going on.
+        bib_lines.append(_build_si_titlepage(title_text, authors,
+                                             affiliation_block, email))
         events.insert(supp_idx, (0, 'passthrough', '\n'.join(bib_lines)))
         events = [e for e in events
                   if not (e[1] == 'section' and is_si_section(e[2]))]

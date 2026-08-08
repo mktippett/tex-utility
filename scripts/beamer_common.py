@@ -596,6 +596,28 @@ def _restructure_tables(content, placement='h', centering=True,
     return ''.join(result)
 
 
+_DISPLAY_MATH_CLOSE_RE = re.compile(
+    r'(?:\\\]|\\end\{(?:equation|align|gather|multline|eqnarray)\*?\}|\$\$)\s*$'
+)
+
+
+def _item_needs_period(item):
+    """
+    True if `item` (already stripped) lacks terminal sentence punctuation.
+
+    An item ending in a display-math closer (\\], \\end{equation}, $$, ...)
+    is checked for punctuation *before* that closer, since the sentence-
+    ending period conventionally sits inside the math (e.g. '\\,.\\]')
+    rather than after it -- otherwise a period gets appended after the
+    closer too, producing a doubled '.\\].'.
+    """
+    m = _DISPLAY_MATH_CLOSE_RE.search(item)
+    if m:
+        pre = item[:m.start()].rstrip()
+        return not pre or pre[-1] not in '.!?:'
+    return item[-1] not in '.!?:'
+
+
 def _flatten_lists(content):
     """
     Convert enumerate and itemize environments to prose paragraphs.
@@ -616,7 +638,7 @@ def _flatten_lists(content):
             item = item.strip()
             if not item:
                 continue
-            if item[-1] not in '.!?:':
+            if _item_needs_period(item):
                 item += '.'
             sentences.append(item)
         if sentences:

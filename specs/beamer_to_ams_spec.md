@@ -278,7 +278,13 @@ Applied to each frame's raw content string in order:
      (journal convention). Previously a slide's `\captionof{table}{...}`
      became a bare `\caption{}` outside any float — a LaTeX error.
 7. **List flattening** — `_flatten_lists`: `\begin{enumerate|itemize}...\end{...}`
-   → prose paragraph; each `\item` becomes a sentence ending with `.`.
+   → prose paragraph; each `\item` becomes a sentence ending with `.`. An
+   item ending in display math (`\]`, `\end{equation*?}`, `\end{align*?}`,
+   `\end{gather*?}`, `\end{multline*?}`, `$$`) is checked for terminal
+   punctuation **before** that closer (`_item_needs_period`), not after —
+   the sentence period conventionally sits inside the math (`\,.\]`), so a
+   period is only appended when the equation itself doesn't already end
+   in `.`/`!`/`?`/`:`.
 8. **Block environments** — `\begin{block}{Title}` → `\textbf{Title}`.
 9. **Center environment** — strip tags, keep content.
 10. **Whitespace cleanup** — collapse 3+ blank lines to 2.
@@ -368,6 +374,7 @@ bibliography in both postamble variants (§4.5).
 | `\section{Abstract}` | Consumed into `\abstract{}` preamble block; removed from body |
 | `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
+| `\item` whose text ends in a display-math block that already ends in `\,.` (or other terminal punctuation) before `\]`/`\end{equation}`/`$$` | No period appended after the closer — `_item_needs_period` checks punctuation before the closer, not the literal last character. Previously produced a doubled period (`\,.\n\].`) |
 
 ---
 
@@ -420,3 +427,4 @@ bibliography in both postamble variants (§4.5).
 | 2026-07-13 | Added `_build_si_titlepage`: a manual "Supplemental material for:" title page (title/authors/affiliations/corresponding author, styled after `\@maketitle`) now emitted after `%% SI_BEGIN`/`%TC:ignore`, before the first SI figure — previously the SI began right after the bibliography with zero visual indication of the transition. `\maketitle` cannot be called twice (self-destructs in `ametsocV6.1.cls`), so the block is hand-built rather than reusing it. Appendices remain out of scope (author-driven `\appendix`, not this converter). Verified: compiled clean with `pdflatex`+`bibtex` against the real AMS class (screenshot-matched to a published example), `texcount` balance clean, `extract_main.py` correctly strips the whole title page for a main-only submission and re-closes the orphaned `%TC:ignore` | Yes |
 | 2026-07-13 | Added `_extract_journal_name` + `--journal` CLI flag, mirroring AGU's `%\journalname{}`/`--journal` mechanism for coherence between the two converters. Initial implementation made `\journal{}` live (uncommented) when a key was supplied — caught by a real `pdflatex` compile against `ams/ametsocV6.1.cls` before commit: `\journal{}` is undefined in that standalone class (zero definitions found), raising "Undefined control sequence" and leaking the key text into the typeset body. Fixed to keep the directive always commented (`% \journal{<key>}`). **Reverted later same day** (see next row) once the underlying premise turned out to be false. | Yes, then reverted |
 | 2026-07-13 | Reverted the above: removed `_extract_journal_name`, the `journal` param/CLI flag, and the commented `\journal{}` placeholder entirely (also reverted the `--journal` threading briefly added to `convert.py`'s `ams` branch, and the sentinel line added to `examples/starter-slides.tex`). Root cause, found while investigating why `--journal` had no visible effect: `\journal{}` isn't merely undefined in *this* standalone class — AMS deleted the per-journal-name macro from `ametsoc.cls` entirely in package v5.0 (2020; `ams/AMS LaTeX Package V6.1/README.txt`: "Removed option to select journal name for two-column"), and an even older per-journal command (`\bams` et al., pre-2014) is also long gone. Neither the current `.cls` nor `templateV6.1.tex` has any journal-selection command to eventually target, commented or otherwise — unlike AGU's `\journalname{}`, which is real and live. A commented placeholder with nothing to uncomment into was judged not worth keeping; user confirmed via explicit choice ("Remove entirely") over keeping it as an inert placeholder or a plain non-macro comment. | Yes |
+| 2026-08-08 | Shared: `_flatten_lists` doubled the sentence period when an `\item` ended in display math that already closed with `\,.` before `\]` (e.g. a hypothesis equation) — the old check only looked at the item's literal last character (`\]`), which is never terminal punctuation, so it always appended a stray `.` after the closer. Added `_item_needs_period` (with `_DISPLAY_MATH_CLOSE_RE` matching `\]`, `\end{equation*?}`, `\end{align*?}`, `\end{gather*?}`, `\end{multline*?}`, `$$`) to check punctuation before the closer instead. Verified against the reported repro and against non-math/no-trailing-period cases (behavior unchanged there) | Yes |

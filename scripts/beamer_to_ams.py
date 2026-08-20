@@ -137,6 +137,13 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
     # command left to target, live or commented.
     return rf"""\documentclass{{ametsocV6.1}}
 
+%% ametsocV6.1.cls loads mathptmx/newtxtext (Times-like PostScript fonts)
+%% but never loads fontenc itself. Without T1, non-ASCII text-mode
+%% commands like \l fall back to OT1 Computer Modern glyphs mid-font
+%% family, producing broken spacing -- e.g. a Polish surname like
+%% Plotka renders as two words instead of one. T1 must come first.
+\usepackage[T1]{{fontenc}}
+
 %% AMS packages (ametsoc.sty is already loaded by the class)
 \usepackage{{graphicx}}
 {pkg_ams}

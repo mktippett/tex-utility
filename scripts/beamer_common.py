@@ -411,6 +411,7 @@ def _restructure_figures(content, placement='h', centering=True,
     n = len(text)
 
     inc_re = re.compile(r'\\includegraphics(\[[^\]]*\])?\{([^}]+)\}')
+    fig_end_re = re.compile(r'\\end\{figure\}')
 
     while pos < n:
         # Look for next \begin{figure} and next bare \includegraphics
@@ -425,7 +426,7 @@ def _restructure_figures(content, placement='h', centering=True,
         # If an existing \begin{figure} comes first, pass it through unchanged
         if fig_begin != -1 and fig_begin < inc_m.start():
             result.append(text[pos:fig_begin])
-            fig_end_m = re.search(r'\\end\{figure\}', text, fig_begin)
+            fig_end_m = fig_end_re.search(text, fig_begin)
             if fig_end_m:
                 result.append(text[fig_begin:fig_end_m.end()])
                 pos = fig_end_m.end()

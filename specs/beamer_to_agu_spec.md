@@ -342,3 +342,4 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-07-07 | Citation remap extended to extracted front matter (pipeline-gap audit): abstract, PLS, and key points are run through `_remap_citations_to_apacite` after extraction — previously natbib commands there survived as undefined under `apacite` (compile error) | Yes |
 | 2026-07-07 | SI scaffold made conditional: `%% SI_BEGIN` + cover page + checklist emitted only when the deck has a Supplemental section; no-SI decks previously got a stray SI cover page in the combined PDF | Yes |
 | 2026-07-07 | Shared: `_restructure_tables` (table floats) and no-`\inst{}` fallback fix — see `beamer_to_ams_spec.md` sync log 2026-07-07 for details. Output byte-identical for both example decks | Yes |
+| 2026-08-22 | Shared: `_restructure_figures` `re.search(..., text, fig_begin)` crash fix — see `beamer_to_ams_spec.md` sync log 2026-08-22 for details. Output byte-identical for both example decks | Yes |

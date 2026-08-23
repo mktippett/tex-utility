@@ -348,6 +348,49 @@ def check_sentinel_aliases_unit():
                              f'{src.strip()!r}')
 
 
+_FIGURE_PASSTHROUGH_SAMPLE = (
+    'abcd\\begin{figure}\n'
+    '  \\includegraphics{existing.pdf}\n'
+    '  \\caption{Existing}\n'
+    '  \\label{fig:existing}\n'
+    '\\end{figure}\n'
+    '\n'
+    '\\includegraphics{bare.pdf}\n'
+    '\\caption{Bare}\n'
+)
+
+
+def check_restructure_figures_passthrough_unit():
+    r"""A pre-existing hand-authored \begin{figure}...\end{figure} block must
+    pass through _restructure_figures unchanged, and a bare \includegraphics
+    after it must still get wrapped into a new figure environment.
+
+    Regression test for the 2026-08-22 crash: the pass-through branch called
+    re.search(pattern, text, fig_begin) with fig_begin (a match offset) as
+    the third positional arg, which re.search interprets as `flags`, not a
+    start position.  fig_begin=4 (the offset used here) has re.LOCALE's bit
+    set, which raised `ValueError: cannot use LOCALE flag with a str
+    pattern` under the old code -- this fixture is a real repro, not just
+    coverage padding. See specs/beamer_to_ams_spec.md 2026-08-22 sync-log row.
+    """
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import beamer_common as bc
+
+    try:
+        result = bc._restructure_figures(_FIGURE_PASSTHROUGH_SAMPLE)
+    except ValueError as e:
+        _failures.append(f'  FAIL  _restructure_figures raised on pre-existing '
+                         f'figure block: {e}')
+        return
+
+    check('existing figure passed through unchanged', result,
+          r'\\begin\{figure\}\n  \\includegraphics\{existing\.pdf\}\n'
+          r'  \\caption\{Existing\}\n  \\label\{fig:existing\}\n\\end\{figure\}')
+    check('bare includegraphics still wrapped', result,
+          r'\\begin\{figure\}\[h\]\s*\\centering\s*\\includegraphics\{bare\.pdf\}'
+          r'\s*\\caption\{Bare\}')
+
+
 _NO_INST_SRC = r"""
 \documentclass{beamer}
 \title{No-inst Deck}
@@ -560,6 +603,7 @@ def main():
     # --- extract_main.py: \includegraphics rewrite (unit test) ---
     unit_sections = [
         ('extract_main figure rewrite (unit)', check_figure_rewrite_unit),
+        ('restructure_figures passthrough (unit)', check_restructure_figures_passthrough_unit),
         ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),
         ('no-SI conversion + --no-si (e2e)', check_no_si_paths),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),

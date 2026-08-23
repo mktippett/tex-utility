@@ -134,6 +134,10 @@ def check_agu(text):
     check('acknowledgments cmd',       text, r'\\acknowledgments')
     check('acks content',              text, r'NSF grant AGS-0000000')
     check('bibliography',              text, r'\\bibliography\{refs\}')
+    n_bib = len(re.findall(r'\\bibliography\{refs\}', text))
+    if n_bib != 1:
+        _failures.append(f'  FAIL  bibliography count: expected 1, got {n_bib} '
+                          '(source places \\bibliography{} outside a frame)')
 
     # --- SI header ---
     check('SI clearpage+counter',      text, r'\\clearpage\s+\\setcounter\{page\}\{1\}')
@@ -163,6 +167,10 @@ def check_manuscript(text):
     check('multirow pkg',              text, r'\\usepackage\{multirow\}')
     check('no appendixnumberbeamer',   text, r'appendixnumberbeamer', present=False)
     check('bibliographystyle kept',    text, r'\\bibliographystyle\{plainnat\}')
+    n_bib = len(re.findall(r'\\bibliography\{refs\}', text))
+    if n_bib != 1:
+        _failures.append(f'  FAIL  bibliography count: expected 1, got {n_bib} '
+                          '(source places \\bibliography{} outside a frame)')
 
     # --- abstract ---
     check('abstract command',          text, r'\\abstract\{')
@@ -240,6 +248,7 @@ def check_extract_main(text):
     # --- SI removed ---
     check('SI section removed',       text, r'Supporting Information', present=False)
     check('SI figure removed',        text, r'si_plotA', present=False)
+    check('second SI figure removed', text, r'si_plotB', present=False)
     check('SI equation removed',      text, r'\\begin\{equation\}', present=False)
     check('SI table removed',         text, r'\\begin\{table\}', present=False)
     check('SI sentinel consumed',     text, r'%%\s*SI_BEGIN', present=False)
@@ -276,6 +285,8 @@ def check_extract_main(text):
     check('ref to SI table unchanged',  text, r'Table~\\ref\{tab:si1\}')
     check('eqref to SI eq unchanged',   text, r'Eq\.~\\eqref\{eq:si1\}')
     check('Cref to SI label unchanged', text, r'\\Cref\{fig:si1\}')
+    check('multi-label Cref unchanged', text, r'\\Cref\{fig:si1,fig:si2\}')
+    check('mixed cref unchanged',       text, r'\\cref\{fig:main1,fig:si2\}')
 
     # --- \pageref{} to SI label flattened to literal page number ---
     check('pageref to SI fig -> 2',     text, r'page~2')
@@ -288,6 +299,8 @@ def check_extract_main(text):
           r'\\renewcommand\\thetable\{S1\}\\refstepcounter\{table\}\\label\{tab:si1\}')
     check('SI label reconstruction: eq:si1', text,
           r'\\renewcommand\\theequation\{S1\}\\refstepcounter\{equation\}\\label\{eq:si1\}')
+    check('SI label reconstruction: fig:si2 (from multi-label ref)', text,
+          r'\\renewcommand\\thefigure\{S2\}\\refstepcounter\{figure\}\\label\{fig:si2\}')
 
     # --- \ref{} to a main-text label left unchanged ---
     check('ref to main figure unchanged', text, r'\\ref\{fig:main1\}')
@@ -439,6 +452,9 @@ _NO_SI_DECK = r"""
 \begin{frame}{Result}
 Body text.
 \end{frame}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
 \end{document}
 """
 
@@ -464,6 +480,22 @@ def check_no_si_paths():
         check('no-SI: sentinel absent', text, r'%% SI_BEGIN', present=False)
         check('no-SI: endmatter still emitted', text,
               r'\\section\*\{Open Research Section\}')
+        n_bib = len(re.findall(r'\\bibliography\{refs\}', text))
+        if n_bib != 1:
+            _failures.append(f'  FAIL  no-SI AGU: bibliography count expected 1, got {n_bib}')
+
+        ams_out = Path(tmpdir) / 'no_si_manuscript.tex'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'beamer_to_ams.py'), str(deck), str(ams_out)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  no-SI AMS convert exited '
+                             f'{result.returncode}:\n{result.stderr}')
+        else:
+            ams_text = ams_out.read_text()
+            n_bib_ams = len(re.findall(r'\\bibliography\{refs\}', ams_text))
+            if n_bib_ams != 1:
+                _failures.append(f'  FAIL  no-SI AMS: bibliography count expected 1, got {n_bib_ams}')
 
         subdir = Path(tmpdir) / 'SUBMIT'
         result = subprocess.run(

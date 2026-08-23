@@ -194,24 +194,37 @@ def flatten_refs(text, aux_labels):
 
     def repl(m):
         nonlocal n_pagerefs
-        cmd, star, label = m.groups()
-        if label not in si_labels:
-            if label not in aux_labels and label not in missing_warned:
-                missing_warned.add(label)
-                warnings.append(
-                    f"label '{label}' not found in .aux "
-                    "(stale .aux? \\ref will render as ??)")
-            return m.group(0)
+        cmd, star, label_group = m.groups()
 
-        info = si_labels[label]
+        # \pageref{} doesn't support cleveref's comma-joined multi-label
+        # syntax in standard LaTeX -- treat the whole group as one label.
         if cmd == 'pageref':
+            label = label_group
+            if label not in si_labels:
+                if label not in aux_labels and label not in missing_warned:
+                    missing_warned.add(label)
+                    warnings.append(
+                        f"label '{label}' not found in .aux "
+                        "(stale .aux? \\ref will render as ??)")
+                return m.group(0)
             n_pagerefs += 1
-            return info['page']
+            return si_labels[label]['page']
 
-        entry = si_labels_used.setdefault(
-            label, {'ref': info['ref'], 'needs_noun': False})
-        if cmd in ('autoref', 'cref', 'Cref'):
-            entry['needs_noun'] = True
+        # \ref{}/\eqref{}/\autoref{}/\cref{}/\Cref{} may cite several labels
+        # at once, e.g. \Cref{fig:si1,fig:si2}; resolve each independently.
+        for label in label_group.split(','):
+            if label not in si_labels:
+                if label not in aux_labels and label not in missing_warned:
+                    missing_warned.add(label)
+                    warnings.append(
+                        f"label '{label}' not found in .aux "
+                        "(stale .aux? \\ref will render as ??)")
+                continue
+            info = si_labels[label]
+            entry = si_labels_used.setdefault(
+                label, {'ref': info['ref'], 'needs_noun': False})
+            if cmd in ('autoref', 'cref', 'Cref'):
+                entry['needs_noun'] = True
         return m.group(0)
 
     new_text = _REF_CMD_RE.sub(repl, text)

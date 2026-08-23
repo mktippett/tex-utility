@@ -458,6 +458,13 @@ def convert(input_path, output_path, journal=None):
                                      n_si_figs=n_si_figs, n_si_tables=n_si_tables)
         em_text += '\n\n' + si_header
 
+    # Drop any \bibliography{} passthrough events already parsed from the body
+    # (e.g. one placed outside a frame) to avoid duplication -- em_text above
+    # injects the single canonical copy.
+    events = [e for e in events
+              if not (e[1] == 'passthrough' and
+                      re.search(r'\\bibliography\{', e[2]))]
+
     # Append at end of body; the Supplemental reorder below repositions it.
     events.append((len(body) + 1, 'passthrough', em_text))
     events.sort(key=lambda x: x[0])

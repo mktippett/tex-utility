@@ -319,6 +319,13 @@ def convert(input_path, output_path):
     bib_style = _extract_bib_style(src)
     bib_file = _extract_bib_file(src)
 
+    # Drop any \bibliography{} passthrough events already parsed from the body
+    # (e.g. one placed outside a frame) to avoid duplication when we inject
+    # it explicitly below, in either branch.
+    events = [e for e in events
+              if not (e[1] == 'passthrough' and
+                      re.search(r'\\bibliography\{', e[2]))]
+
     # Move endmatter + bibliography before any supplemental section,
     # mirroring AGU logic.
     supp_idx = next(
@@ -327,11 +334,6 @@ def convert(input_path, output_path):
         None
     )
     if supp_idx is not None:
-        # Drop any \bibliography{} passthrough events already parsed from the body
-        # to avoid duplication when we inject it explicitly below.
-        events = [e for e in events
-                  if not (e[1] == 'passthrough' and
-                          re.search(r'\\bibliography\{', e[2]))]
         supp_idx = next(
             (i for i, (_, etype, content) in enumerate(events)
              if etype == 'section' and is_si_section(content)),

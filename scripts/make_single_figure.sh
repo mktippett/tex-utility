@@ -43,7 +43,7 @@ echo "\end{document}" >> $FIGURES.tex
 
 pdflatex -interaction=nonstopmode -halt-on-error $FIGURES || exit 1
 
-for ii in $(seq -w 1 $NFIGS) ; do
+for ii in $(seq 1 $NFIGS) ; do
 cat <<EOF > ${FIGURES}_$ii.tex
 \documentclass{article}
 \usepackage{pdfpages}

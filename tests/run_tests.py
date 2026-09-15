@@ -127,6 +127,26 @@ def check_agu(text):
     check('no bare caption after tabular', text,
           r'\\end\{tabular\}\s*\\caption', present=False)
 
+    # --- appendix (2 sections -> auto-lettered A, B) ---
+    check('appendix cmd',              text, r'^\\appendix\s*$', flags=re.MULTILINE)
+    check('appendix A title',          text, r'\\section\{Extended Derivation\}')
+    check('appendix A subsection',     text, r'\\subsection\{Boundary conditions\}')
+    check('appendix B title (no "Appendix" prefix stripped -- none present)',
+          text, r'\\section\{Statistical Significance Details\}')
+    check('appendix figure',           text, r'test_appendix_figure\.pdf')
+    check('appendix caption',          text, r'Field significance test results')
+    check('no leaked "Appendix A:" prefix in section title', text,
+          r'\\section\{Appendix', present=False)
+    # AGU template order: body -> Appendix -> Open Research/COI/Acknowledgments
+    # -> References (opposite side of the endmatter from AMS)
+    app_pos  = text.find(r'\appendix')
+    or_pos   = text.find(r'\section*{Open Research Section}')
+    if app_pos == -1 or or_pos == -1:
+        _failures.append('  FAIL  appendix-before-endmatter: markers not found')
+    elif not (app_pos < or_pos):
+        _failures.append('  FAIL  appendix-before-endmatter: \\appendix must '
+                         'precede \\section*{Open Research Section}')
+
     # --- endmatter sentinels ---
     check('open research section',     text, r'\\section\*\{Open Research Section\}')
     check('open research content',     text, r'zenodo\.org/record/test')
@@ -197,6 +217,32 @@ def check_manuscript(text):
     if ds_pos == -1 or bib_pos == -1 or not (ds_pos < bib_pos):
         _failures.append('  FAIL  endmatter-before-bib: \\datastatement must '
                          'precede \\bibliography{}')
+    # AMS's word limit counts acknowledgments (and appendixes) -- confirms
+    # the §2b fix removed the stray %TC:ignore that used to wrap this block
+    check('acknowledgments NOT tc-ignored', text,
+          r'%TC:ignore\s*\\acknowledgments', present=False)
+
+    # --- appendix (2 sections -> auto-lettered A, B) ---
+    check('appendix[A] cmd',           text, r'\\appendix\[A\]')
+    check('appendixtitle A',           text, r'\\appendixtitle\{Extended Derivation\}')
+    check('appendix A subsection',     text, r'\\subsection\{Boundary conditions\}')
+    check('appendix[B] cmd',           text, r'\\appendix\[B\]')
+    check('appendixtitle B',           text,
+          r'\\appendixtitle\{Statistical Significance Details\}')
+    check('appendix figure',           text, r'test_appendix_figure\.pdf')
+    check('appendix caption tc-ignored', text,
+          r'%TC:ignore\s*\\caption\{Field significance test results.*?%TC:endignore',
+          flags=re.DOTALL)
+    check('appendix NOT tc-ignored',   text,
+          r'%TC:ignore\s*\\appendix', present=False)
+    # AMS template order: Acknowledgments -> Data statement -> Appendix ->
+    # References (opposite side of the endmatter from AGU)
+    app_pos = text.find(r'\appendix[A]')
+    if ds_pos == -1 or app_pos == -1 or bib_pos == -1:
+        _failures.append('  FAIL  datastatement-appendix-bib order: markers not found')
+    elif not (ds_pos < app_pos < bib_pos):
+        _failures.append('  FAIL  datastatement-appendix-bib order: \\appendix must '
+                         'sit between \\datastatement and \\bibliography{}')
 
     # --- body ---
     check('intro section',             text, r'\\section\{Introduction\}')
@@ -279,6 +325,18 @@ def check_extract_main(text):
     # --- main-text figures retained ---
     check('main figure 1 retained',   text, r'plotA\.pdf')
     check('main figure 2 retained',   text, r'plotB1\.pdf')
+
+    # --- appendix is main text: retained (unlike SI), its ref ("A1", not
+    # "S...") is left unchanged rather than swept into the SI label block ---
+    check('appendix figure retained', text, r'plotApp\.pdf')
+    check('appendix cmd retained',    text, r'^\\appendix\s*$', flags=re.MULTILINE)
+    check('appendix title retained',  text, r'\\appendixtitle\{Extended Derivation\}')
+    check('ref to appendix fig unchanged (A1, not SI)', text,
+          r'Figure~\\ref\{fig:app1\}')
+    check('appendix label NOT reconstructed as SI', text,
+          r'\\label\{fig:app1\}')
+    check('no bogus SI reconstruction for A1 ref', text,
+          r'\\refstepcounter\{figure\}\\label\{fig:app1\}', present=False)
 
     # --- \ref{}/\eqref{}/\Cref{} to SI labels left UNCHANGED in text ---
     check('ref to SI figure unchanged', text, r'Figure~\\ref\{fig:si1\}')
@@ -513,6 +571,102 @@ def check_no_si_paths():
         check('--no-si: body preserved', main_tex.read_text(), r'Body text')
 
 
+_APPENDIX_NO_SI_DECK = r"""
+\documentclass{beamer}
+\title{Appendix No SI Deck}
+\author{Solo Author}
+\institute{Some Institute}
+%% EMAIL: solo@example.edu
+\begin{document}
+\section{Results}
+\begin{frame}{Result}
+Body text.
+\end{frame}
+
+\section{Appendix}
+\begin{frame}{Extra derivation}
+Single unlettered appendix content.
+\end{frame}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}
+"""
+
+
+def check_appendix_paths():
+    """A deck with exactly one appendix section and no SI: both converters
+    must emit an UNLETTERED \\appendix (not \\appendix[A]), and the appendix
+    must survive extract_main.py's --no-si packaging since it is part of the
+    main text, not stripped like SI."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        deck = Path(tmpdir) / 'appendix_no_si.tex'
+        deck.write_text(_APPENDIX_NO_SI_DECK)
+
+        ams_out = Path(tmpdir) / 'appendix_manuscript.tex'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'beamer_to_ams.py'), str(deck), str(ams_out)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  single-appendix AMS convert exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        ams_text = ams_out.read_text()
+        check('single appendix AMS: unlettered \\appendix', ams_text,
+              r'^\\appendix\s*$', flags=re.MULTILINE)
+        check('single appendix AMS: no \\appendix[A]', ams_text,
+              r'\\appendix\[', present=False)
+        check('single appendix AMS: content kept', ams_text,
+              r'Single unlettered appendix content')
+        # bare \section{Appendix} (no title text) -> no \appendixtitle{} line
+        # at all, not a placeholder (the class prints "APPENDIX" on its own;
+        # \appendixtitle{} is authorial decoration, not required)
+        check('single appendix AMS: no \\appendixtitle{}', ams_text,
+              r'\\appendixtitle', present=False)
+        check('single appendix AMS: no placeholder text', ams_text,
+              r'Appendix title here', present=False)
+
+        agu_out = Path(tmpdir) / 'appendix_agu.tex'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'beamer_to_agu.py'), str(deck), str(agu_out)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  single-appendix AGU convert exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        agu_text = agu_out.read_text()
+        check('single appendix AGU: \\appendix', agu_text, r'^\\appendix\s*$',
+              flags=re.MULTILINE)
+        check('single appendix AGU: section title (marker prefix stripped)',
+              agu_text, r'\\section\{Appendix\}', present=False)
+        # bare \section{Appendix} (no title text) -> empty \section{}, not a
+        # placeholder (\@seccntformat prints "Appendix A" + two spaces, no
+        # colon, so an empty title is harmless, just trailing whitespace)
+        check('single appendix AGU: empty \\section{}', agu_text,
+              r'\\appendix\s*\\section\{\}')
+        check('single appendix AGU: no placeholder text', agu_text,
+              r'Appendix title here', present=False)
+        check('single appendix AGU: content kept', agu_text,
+              r'Single unlettered appendix content')
+
+        # --- extract_main.py: appendix is main text, must survive --no-si ---
+        subdir = Path(tmpdir) / 'SUBMIT'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'), str(agu_out),
+             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si'],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  extract_main --no-si (appendix) exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        main_tex = subdir / 'main.tex'
+        if not main_tex.exists():
+            _failures.append('  FAIL  extract_main --no-si (appendix): main.tex not written')
+            return
+        check('extract_main retains appendix', main_tex.read_text(),
+              r'Single unlettered appendix content')
+
+
 def check_rebase_paths_unit():
     """Relative \\includegraphics paths must be rewritten to resolve from the
     output directory; absolute paths are untouched."""
@@ -638,6 +792,7 @@ def main():
         ('restructure_figures passthrough (unit)', check_restructure_figures_passthrough_unit),
         ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),
         ('no-SI conversion + --no-si (e2e)', check_no_si_paths),
+        ('single appendix + --no-si (e2e)', check_appendix_paths),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),
     ]
     for section, fn in unit_sections:

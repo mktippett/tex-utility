@@ -42,6 +42,19 @@ _AUTHOR_SEP_RE = re.compile(r'\s*\\and\b\s*|\s*,\s*and\s+|\s*,\s*|\s+and\s+')
 # fallback patterns ("Supplemental", "Supplement", "Supporting Information").
 _SI_SECTION_RE = re.compile(r'supplement|supporting\s+information', re.IGNORECASE)
 
+# Section title that marks the start of appendix content. Anchored (unlike
+# _SI_SECTION_RE's unanchored search) so a title like "Notes on the appendix"
+# is not swallowed -- the author must lead the title with the word.
+_APPENDIX_SECTION_RE = re.compile(r'^\s*appendix\b', re.IGNORECASE)
+
+# Strips a leading "Appendix"/"Appendix A" marker (plus separator) off a
+# section title, leaving the appendix's own title, e.g. "Appendix B: Derivation
+# details" -> "Derivation details"; "Appendix" (bare) -> "".
+_APPENDIX_PREFIX_RE = re.compile(
+    r'^\s*appendix\b\s*[a-zA-Z0-9]{0,3}\s*(?:[:.]|--|–|—|-)?\s*',
+    re.IGNORECASE,
+)
+
 # Endmatter sentinel names: canonical generic name -> accepted spellings.
 # The AGU_* forms are the original (AGU-first) names, supported indefinitely
 # so existing decks keep converting; new decks should use the generic names.
@@ -883,6 +896,89 @@ def extract_abstract(events):
 def is_si_section(event_content):
     r"""True if a 'section' event's \section{...} string marks the SI boundary."""
     return bool(_SI_SECTION_RE.search(event_content))
+
+
+def is_appendix_section(event_content):
+    r"""
+    True if a 'section' event's \section{...} string marks the start of
+    appendix material. Only a top-level \section (never \subsection) can
+    open the appendix, and the title must begin with "Appendix"
+    (_APPENDIX_SECTION_RE) -- stricter than is_si_section's unanchored
+    search, since "Appendix" is a common enough word that an unanchored
+    match would misfire on ordinary section titles.
+    """
+    m = re.match(r'\\section\*?\{([^}]*)\}', event_content)
+    if not m:
+        return False
+    return bool(_APPENDIX_SECTION_RE.match(m.group(1)))
+
+
+def _appendix_title(section_content):
+    r"""
+    Title text for one appendix, stripped of its "Appendix"/"Appendix A"
+    marker prefix: \section{Appendix B: Derivation details} -> "Derivation
+    details". Returns '' when nothing is left (bare \section{Appendix} or
+    \section{Appendix A}) -- callers supply a placeholder in that case.
+    """
+    m = re.match(r'\\section\*?\{([^}]*)\}', section_content)
+    title = m.group(1).strip() if m else ''
+    return _APPENDIX_PREFIX_RE.sub('', title, count=1).strip()
+
+
+def extract_appendix(events):
+    r"""
+    Find the \section{...} event that opens the appendix (is_appendix_section),
+    consume it and every following event up to the SI section marker (or the
+    end of the list), and split that range into one or more appendices.
+
+    Within the consumed range, each top-level \section{...} event (other than
+    the SI marker, which ends the range) opens a new appendix, titled via
+    _appendix_title. \subsection{...} 'section' events, 'frame' events, and
+    ordinary 'passthrough' events (\clearpage, figure/table counter resets)
+    all accumulate into the current appendix's own event list unchanged, to
+    be assembled later with assemble_body.
+
+    A bare \bibliography{}/\bibliographystyle{} passthrough is never
+    appendix content -- decks commonly place these just before the SI
+    section, which would otherwise land them inside the last appendix and
+    duplicate the converter's own injected bibliography. Such events are
+    left in remaining_events instead, for the caller's existing dedup pass.
+
+    Returns (appendices, remaining_events):
+      appendices: list of (title, events) tuples in document order; []
+        when no appendix section is found.
+      remaining_events: events with the consumed range removed (any bare
+        bibliography passthrough within that range is kept, at the end).
+    """
+    i = 0
+    while i < len(events):
+        _pos, etype, content = events[i]
+        if etype == 'section' and is_appendix_section(content):
+            appendices = []
+            cur_title = _appendix_title(content)
+            cur_events = []
+            leftover = []
+            j = i + 1
+            while j < len(events):
+                _jpos, jtype, jcontent = events[j]
+                if jtype == 'section' and not jcontent.startswith(r'\subsection'):
+                    if is_si_section(jcontent):
+                        break
+                    appendices.append((cur_title, cur_events))
+                    cur_title = _appendix_title(jcontent)
+                    cur_events = []
+                    j += 1
+                    continue
+                if jtype == 'passthrough' and re.search(r'\\bibliography(?:style)?\{', jcontent):
+                    leftover.append(events[j])
+                    j += 1
+                    continue
+                cur_events.append(events[j])
+                j += 1
+            appendices.append((cur_title, cur_events))
+            return appendices, events[:i] + leftover + events[j:]
+        i += 1
+    return [], events
 
 
 def extract_email(src):

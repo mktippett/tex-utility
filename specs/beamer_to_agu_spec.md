@@ -251,11 +251,59 @@ and endmatter are excluded. `texcount` directive comments implement this:
 | Endmatter → SI header | `%TC:ignore` (prepended to `em_text`) | `%TC:endignore` (in `_AGU_CLOSE`, before `\end{document}`) |
 
 The `\begin{abstract}...\end{abstract}` block and body sections are outside all
-ignore blocks and are counted normally.
+ignore blocks and are counted normally. The appendix (§4.11) is also outside
+every ignore block — it is prepended to `em_text` *before* its leading
+`%TC:ignore`, so it counts the same as body text.
 
 A publication-unit guidance comment is injected between `\journalname{}` and
 `\begin{document}` (two `%`-prefixed lines explaining the 25 PU limit, word-count
 exclusions, and the 12 PU limit for GRL letters).
+
+### 4.11 Appendix (`extract_appendix`, `_build_appendix_block`; added 2026-09-15)
+
+Shared detection with AMS (`is_appendix_section`, `_appendix_title`,
+`extract_appendix` in `beamer_common.py` — see
+`specs/beamer_to_ams_spec.md` §4.10 for the full extraction algorithm,
+identical here). Author marker: a `\section{...}` whose title begins with
+"Appendix".
+
+`_build_appendix_block(appendices)` builds the AGU output
+(`agujournal2019.cls:1034-1051`, `agu/agujournaltemplate.tex:311-323`): one
+`\appendix` switch, then one `\section{Title}` per appendix — the class
+auto-letters every section under `\appendix` mode ("Appendix A: Title",
+"Appendix B: …"), **even for a single appendix**. Unlike AMS, AGU has no
+unlettered form: a lone appendix still renders as "Appendix A" (known
+asymmetry between the two classes, not this converter's doing — recorded in
+§6, not fixed).
+
+`Title` may be empty (bare `\section{Appendix}`, no title beyond the marker
+— `_appendix_title` returns `''`): emitted as `\section{}`, **not** a
+placeholder (fixed 2026-09-15; see §7). `agujournal2019.cls`'s
+`\@seccntformat` (`agujournal2019.cls:669`) prints `\thesection` followed by
+two spaces, no colon or other separator, so an empty title renders as
+"Appendix A" with harmless trailing whitespace.
+
+**Known limitation, recorded not fixed (§6, 2026-09-15, user-reported,
+deferred by user's own choice):** a trailing `\label{}` on the appendix
+marker section is silently dropped, same root cause as AMS (shared
+`_appendix_title` extracts only the title text) — see
+`specs/beamer_to_ams_spec.md` §4.10 for the full writeup. Unlike AMS, AGU's
+`\section{}` under `\appendix` mode *does* call `\refstepcounter{section}`
+and correctly set `\@currentlabel` to "Appendix A" (`agujournal2019.cls`'s
+own `\appendix` definition sets `\def\@currentlabel{\Alph{section}:}`, and
+the standard `\section` machinery updates it per-section) — so on the AGU
+side alone, simply preserving the label (not yet done) would be sufficient
+to make `\ref{}` resolve correctly; no `\@currentlabel` workaround is needed
+here, unlike AMS. Workaround: attach the label to a `\subsection{}` inside
+the appendix instead.
+
+Injection point: prepended to `em_text` (§4.8) *before* its leading
+`%TC:ignore`, so the appendix lands ahead of Open Research/COI/Acknowledgments
+and the bibliography — AGU template order is body → Appendix → endmatter →
+References, the opposite side of the endmatter from AMS. Because `em_text`
+flows through the single `assemble_body` call into `manuscript_body`
+(§4.3–4.4), the appendix automatically picks up `_remap_citations_to_apacite`
+and `_wrap_equations_linenomath` like the rest of the body.
 
 ---
 
@@ -302,6 +350,11 @@ exclusions, and the 12 PU limit for GRL letters).
 | SI has figures but no `\fig{}`| Falls back to counting `\includegraphics{` in SI frame content |
 | SI has tables via `\begin{table}` only (no `tabular`) | Falls back to counting `\begin{table` if `\begin{tabular` count is 0 |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
+| `\section{Appendix...}` present (§4.11) | Consumed by `extract_appendix` (shared with AMS); one `\appendix` + one `\section{Title}` per appendix, prepended ahead of the endmatter — AGU template order is body → Appendix → endmatter → References |
+| Single appendix, AGU output | Always renders "Appendix A" — `agujournal2019.cls:1040` hardcodes `\thesection` to `Appendix \Alph{section}`; AGU has no unlettered form like AMS's bare `\appendix`. Asymmetry is the classes', not this converter's; recorded, not fixed |
+| Bare `\bibliography{}`/`\bibliographystyle{}` sitting between the appendix marker and the SI section | Left out of appendix content (`extract_appendix`'s `leftover` list), not swept into the last appendix's assembled body |
+| Appendix figure files from `extract_main.py`/`make_single_figure.sh` | Named sequentially (`figN.pdf`, document order), not `figA1.pdf`-style. Recorded limitation, not fixed |
+| `\label{}` on the appendix marker section | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.11. Unlike AMS, simply preserving the label would be sufficient here (AGU's `\section{}` correctly sets `\@currentlabel`); workaround meanwhile: label a `\subsection{}` inside the appendix instead |
 
 ---
 
@@ -344,3 +397,6 @@ exclusions, and the 12 PU limit for GRL letters).
 | 2026-07-07 | Shared: `_restructure_tables` (table floats) and no-`\inst{}` fallback fix — see `beamer_to_ams_spec.md` sync log 2026-07-07 for details. Output byte-identical for both example decks | Yes |
 | 2026-08-22 | Shared: `_restructure_figures` `re.search(..., text, fig_begin)` crash fix — see `beamer_to_ams_spec.md` sync log 2026-08-22 for details. Output byte-identical for both example decks | Yes |
 | 2026-08-22 | Fixed duplicate `\bibliography{}` when the source places it outside a frame: `events` already carries it as a `passthrough` event from `build_event_list`, and `em_text` (built at line ~455) separately composes an explicit `bib_line` copy — the parsed copy was never filtered before, so both landed in the output (ultrareview finding on commit b3863d0; AGU was affected in both the SI-present and no-SI paths, unlike AMS which already filtered in its SI branch). Added a filter dropping `passthrough` events matching `\bibliography{` before appending `em_text`. **Regression test added same day**: `check_agu` now asserts exactly one `\bibliography{refs}` in `tests/test_input.tex`'s output (that fixture already places the bibliography outside a frame at line 214); `check_no_si_paths` asserts the count in the no-SI AGU conversion output too | Yes |
+| 2026-09-15 | Added appendix support (§4.11): shared `extract_appendix`/`is_appendix_section`/`_appendix_title` in `beamer_common.py` (see `beamer_to_ams_spec.md` §4.10 for the shared extraction algorithm and its bug-fix history), `_build_appendix_block` here — reverses the prior out-of-scope stance. Prepended to `em_text` before its leading `%TC:ignore` so it counts toward the body like the rest of the main text. Compile-verified against the real `agujournal2019.cls` with `apacite` (`pdflatex`×3+`bibtex`, two-appendix deck, clean exit). Output diffed against the pre-change converter on both example decks: byte-identical (AGU emits no `%TC:ignore`/endmatter change for this feature, unlike AMS — see its sync log for the parallel fix that does change AMS output) | Yes |
+| 2026-09-15 | Fixed appendix-title placeholder for a bare `\section{Appendix}` (no title beyond the marker) — same-day companion to the AMS fix (see `beamer_to_ams_spec.md` sync log, user-reported on a compiled AMS PDF). Was falling back to a literal `\section{Appendix title here.}`. `agujournal2019.cls`'s `\@seccntformat` prints `\thesection` + two spaces with no colon, so an empty title (`\section{}`) is harmless — just trailing whitespace after "Appendix A". Fixed by emitting the title as-is (possibly empty) instead of substituting a stub. **Regression test added same day**: `check_appendix_paths` asserts an empty `\section{}` and no "Appendix title here" text in AGU output | Yes |
+| 2026-09-15 | User asked whether `\label{}` on the appendix marker resolves via `\ref{}` — same-day companion investigation to the AMS row (see `beamer_to_ams_spec.md` sync log). Confirmed and documented that it's dropped here too, same shared root cause. Unlike AMS, AGU's own `\section{}` under `\appendix` mode already sets `\@currentlabel` correctly, so this side has a cleaner fix available (just preserve the label) whenever it's picked up. **User explicitly deferred the fix**; recorded as a known limitation with a working workaround (§6) rather than fixed | Yes |

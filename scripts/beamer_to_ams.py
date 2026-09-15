@@ -12,6 +12,7 @@ If no output file is given, writes to <input_stem>_manuscript.tex.
 """
 
 import re
+import string
 import sys
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from beamer_common import (
     preprocess_body,
     build_event_list,
     extract_abstract,
+    extract_appendix,
     extract_email,
     extract_key_points,
     extract_plain_language_summary,
@@ -230,8 +232,13 @@ def _sentinel_content(sentinel_inner, label):
 def _build_endmatter(sentinel_inner):
     r"""
     \acknowledgments + \datastatement block, emitted immediately before the
-    bibliography.  Wrapped in %TC:ignore -- AMS's word-limit rule excludes
-    acknowledgments and the data availability statement.
+    bibliography.  NOT wrapped in %TC:ignore -- AMS's published word-limit
+    rule counts body text, acknowledgments, and appendixes toward the 7500-word
+    limit, and excludes only the title page, abstract, references, captions,
+    tables, and figures. (The data availability statement isn't named on
+    either side of that list; treated as counted here -- the conservative
+    reading, since over-counting costs an author a trim, not a bounced
+    submission. See specs/beamer_to_ams_spec.md §3.)
     """
     acks = _sentinel_content(sentinel_inner, 'ACKS') or _ENDMATTER_STUBS['ACKS']
     coi = _sentinel_content(sentinel_inner, 'COI')
@@ -240,14 +247,46 @@ def _build_endmatter(sentinel_inner):
     data = (_sentinel_content(sentinel_inner, 'DATA')
             or _ENDMATTER_STUBS['DATA'])
     return '\n'.join([
-        '%TC:ignore',
         r'\acknowledgments',
         acks,
         '',
         r'\datastatement',
         data,
-        '%TC:endignore',
     ])
+
+
+def _build_appendix_block(appendices):
+    r"""
+    \appendix / \appendix[A] blocks (ams/ametsocV6.1.cls, templateV6.1.tex)
+    for the appendix(es) extracted by extract_appendix. A single appendix is
+    unlettered, matching the template's "if only one appendix, use \appendix";
+    two or more get \appendix[A], \appendix[B], ....
+
+    NOT wrapped in %TC:ignore -- appendixes count toward AMS's word limit,
+    same as the rest of the main body (see _build_endmatter). Captions still
+    get per-caption %TC:ignore wrapping via _AMS_FIGURE_OPTS, same as
+    everywhere else in the main text.
+
+    \appendixtitle{} is emitted only when the author gave the appendix an
+    actual title beyond "Appendix"/"Appendix A" (e.g. bare \section{Appendix}
+    has none) -- the class prints "APPENDIX"/"APPENDIX A" from \appendix
+    itself either way, and \appendixtitle{} is authorial decoration, not a
+    class requirement, so there's nothing to placeholder-fill when it's
+    absent.
+    """
+    if not appendices:
+        return ''
+    lettered = len(appendices) > 1
+    parts = []
+    for idx, (title, ev) in enumerate(appendices):
+        parts.append(r'\appendix[' + string.ascii_uppercase[idx] + ']'
+                     if lettered else r'\appendix')
+        if title:
+            parts.append(r'\appendixtitle{' + title + '}')
+        body = assemble_body(ev, figure_opts=_AMS_FIGURE_OPTS)
+        if body.strip():
+            parts.append(body)
+    return '\n\n'.join(parts)
 
 
 def _build_postamble(bib_style, bib_file):
@@ -314,6 +353,9 @@ def convert(input_path, output_path):
     pls_text, events = extract_plain_language_summary(events)
     statement_block = _build_statement_block(pls_text)
 
+    appendices, events = extract_appendix(events)
+    appendix_block = _build_appendix_block(appendices)
+
     endmatter = _build_endmatter(sentinel_inner)
 
     bib_style = _extract_bib_style(src)
@@ -340,6 +382,9 @@ def convert(input_path, output_path):
             None
         )
         bib_lines = [endmatter, '']
+        if appendix_block:
+            bib_lines.append(appendix_block)
+            bib_lines.append('')
         if bib_style:
             bib_lines.append(r'\bibliographystyle{' + bib_style + '}')
         bib_lines.append(r'\bibliography{' + bib_file + '}')
@@ -374,7 +419,11 @@ def convert(input_path, output_path):
         main_events = events[:si_marker_idx + 1]
         si_events = events[si_marker_idx + 1:]
     else:
-        postamble = endmatter + '\n\n' + _build_postamble(bib_style, bib_file)
+        postamble_parts = [endmatter]
+        if appendix_block:
+            postamble_parts.append(appendix_block)
+        postamble_parts.append(_build_postamble(bib_style, bib_file))
+        postamble = '\n\n'.join(postamble_parts)
         main_events = events
         si_events = []
 

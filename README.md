@@ -264,13 +264,15 @@ override the defaults.
   A manual "Supplemental material for:" title page (title/authors/affiliations/
   corresponding author, styled after the AMS `\@maketitle` layout) is then
   emitted before the SI content itself, since `\maketitle` cannot be called a
-  second time (appendices remain an author-driven `\appendix` choice, out of
-  scope for this converter)
+  second time
+- `\section{Appendix…}` opens the appendix (see *Appendix* below); the
+  appendix block sits between the endmatter and the bibliography (AMS
+  template order)
 - `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation/
-  abstract block ignored, every figure/table caption ignored, endmatter
-  (acknowledgments + data statement) ignored, SI ignored — AMS's word-limit
-  rule excludes all of these (captions in particular, unlike AGU, which
-  counts them)
+  abstract block ignored, every figure/table caption ignored, SI ignored —
+  AMS's word-limit rule excludes captions in particular, unlike AGU, which
+  counts them. Body text, acknowledgments/data statement, and appendixes are
+  **not** ignored — AMS's published limit counts all of these
 
 **AGU-specific:**
 - Author affiliations use `\affil{1}`, `\affil{2}`, … (number-based)
@@ -284,6 +286,9 @@ override the defaults.
 - End-matter (Open Research, Conflict of Interest, Acknowledgments) extracted from
   comment-sentinel-wrapped frames (see *End-matter sentinels* below); placed before
   any `\section{Supplemental…}` in the output; per-section stubs used when sentinels absent
+- `\section{Appendix…}` opens the appendix (see *Appendix* below); the
+  appendix block sits ahead of the endmatter (AGU template order: body →
+  Appendix → Open Research/COI/Acknowledgments → References)
 - The SI scaffold (`%% SI_BEGIN`, cover page, "Contents of this file"
   checklist) is emitted only when the deck has a `\section{Supplemental…}`;
   a no-SI deck gets endmatter + bibliography and nothing after (use
@@ -292,7 +297,8 @@ override the defaults.
 - Figures use `\noindent\includegraphics[width=\textwidth]{...}` (no `\centering`)
 - Publication-unit guidance comment inserted between `\journalname{}` and `\begin{document}`
 - `%TC:ignore` / `%TC:endignore` markers for `texcount`: title+key-points block ignored,
-  PLS ignored, endmatter+bibliography+SI ignored; abstract and body are counted
+  PLS ignored, endmatter+bibliography+SI ignored; abstract, body, and the
+  appendix are counted
 
 ---
 
@@ -405,6 +411,40 @@ second level of structure within a section:
   ...
 \end{frame}
 ```
+
+### Appendix
+
+A `\section{}` whose title starts with "Appendix" opens the appendix.
+Everything from there up to the SI section (or the end of the deck) becomes
+appendix content — `\subsection{}`, frames, and figures all work exactly as
+in a normal section:
+
+```latex
+\section{Appendix}
+
+\begin{frame}{Extended derivation}
+  ...
+\end{frame}
+```
+
+Each `\section{}` after that opens a new, auto-lettered appendix (A, B, …).
+A colon/dash after "Appendix" (and an optional letter) is stripped to give
+the appendix its own title, so both of these work:
+
+```latex
+\section{Appendix A: Extended derivation}
+...
+\section{Statistical significance details}   % becomes Appendix B
+```
+
+A single appendix is unlettered in AMS output (bare `\appendix`) but always
+"Appendix A" in AGU output — `agujournal2019.cls` has no unlettered form.
+The appendix is placed per each journal's own template order (AMS:
+acknowledgments → data statement → **appendix** → references; AGU: body →
+**appendix** → acknowledgments/data statement → references), and it counts
+toward the word limit like the rest of the main text — unlike the SI, it is
+never `%TC:ignore`-wrapped. It is also retained by `extract_main.py`'s
+main/SI split, since it's part of the main text.
 
 ### Figures
 

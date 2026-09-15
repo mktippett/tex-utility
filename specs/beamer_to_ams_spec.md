@@ -57,14 +57,18 @@ immediately before the bibliography in both postamble variants:
 - **No supplemental section**: endmatter + `\bibliographystyle{...}` + `\bibliography{...}` + `\end{document}` — bib commands built from raw source, not from passthrough events.
 - **Supplemental section present**: endmatter + bib commands are injected into the event list before the supplemental content (see §4.5); postamble is `\end{document}` only.
 
-### `%TC:ignore` / `%TC:endignore` markers (texcount, 2026-07-02)
+### `%TC:ignore` / `%TC:endignore` markers (texcount, 2026-07-02; word-count
+scope corrected 2026-09-15)
 
-AMS's word-limit rule excludes the title page, authors/affiliations,
-abstract, table text, figures, and references — but (unlike AGU's word-count
-rule) it also excludes **captions**. Verified against `texcount -sum`
-behavior directly (no file-level directive short of `%TC:ignore` wrapping
-reliably zeroes a region; `%TC:macro \caption 0` was tested and has no
-effect on `-sum`):
+AMS's published word-limit rule (7500 words) **counts** body text,
+acknowledgments, and appendixes, and excludes the title page, abstract,
+references, captions, tables, and figures — confirmed on two independent
+searches of AMS author guidance (`ametsoc.org` returns 403 to direct
+fetches, so this is search-sourced, not quoted from the primary page).
+Unlike AGU's word-count rule, it also excludes **captions**. Verified against
+`texcount -sum` behavior directly (no file-level directive short of
+`%TC:ignore` wrapping reliably zeroes a region; `%TC:macro \caption 0` was
+tested and has no effect on `-sum`):
 
 - Front matter: `%TC:ignore` immediately after `\begin{document}`,
   `%TC:endignore` immediately after `\maketitle` (`_build_preamble`) — wraps
@@ -91,9 +95,18 @@ effect on `-sum`):
   the SI portion with `figure_opts={'caption_tcignore': False}` — SI figures
   get no per-caption ignore markers since the outer SI ignore already covers
   them.
-- Endmatter: the `\acknowledgments` + `\datastatement` block is wrapped in
-  its own `%TC:ignore`/`%TC:endignore` pair — AMS's word-limit rule excludes
-  acknowledgments and the data availability statement.
+- Endmatter: the `\acknowledgments` + `\datastatement` block is **NOT**
+  wrapped in `%TC:ignore` (fixed 2026-09-15; previously it was, which
+  under-counted every manuscript against AMS's real policy — see §7). The
+  data availability statement isn't named on either side of AMS's exclusion
+  list; treated as counted here, the conservative reading, since
+  over-counting costs an author a trim rather than a bounced submission at
+  the limit.
+- Appendix (added 2026-09-15, see §4.10): also **NOT** wrapped in
+  `%TC:ignore` — appendixes count toward the word limit same as the main
+  body. Appendix captions still get the normal per-caption
+  `caption_tcignore` wrapping via `_AMS_FIGURE_OPTS`, same as everywhere
+  else in the main text.
 - Supplemental Information: when a supplemental section is present, the
   injected bib block opens `%TC:ignore` right after `%% SI_BEGIN`; the
   postamble closes it with `%TC:endignore` immediately before
@@ -188,12 +201,17 @@ case-insensitive — one matcher for both converters, consistent with
      removed (prevents duplication).
   2. A new passthrough event is inserted immediately before the supplemental section:
      ```latex
-     %TC:ignore
      \acknowledgments
      ...
      \datastatement
      ...
-     %TC:endignore
+
+     \appendix[A]                  % omitted / unlettered if 0 or 1 appendices (§4.10)
+     \appendixtitle{...}
+     ...
+     \appendix[B]
+     \appendixtitle{...}
+     ...
 
      \bibliographystyle{<style>}   % if present
      \bibliography{<file>}
@@ -225,8 +243,6 @@ case-insensitive — one matcher for both converters, consistent with
      all centered). Mirrors `beamer_to_agu.py`'s `_build_si_header`, styled after
      the AMS title page rather than AGU's SI header/checklist. Sits inside the
      `%TC:ignore` opened here (word-count exempt, like the main title page).
-     Appendices are explicitly out of scope for this converter — an author
-     chooses `\appendix` commands manually; nothing here builds one.
   3. The `\section{Supplemental…}` event is stripped (its following frame events
      remain, so the SI content appears after the title page's trailing `\clearpage`).
   4. Postamble is reduced to `\end{document}`.
@@ -340,8 +356,96 @@ AMS mapping (vs. AGU's three `\section*{}` headers):
 | `DATA` | `\datastatement` — AMS's **required** data availability statement |
 
 Missing sentinels fall back to stubs (`_ENDMATTER_STUBS`). The block is
-wrapped in `%TC:ignore`/`%TC:endignore` and emitted immediately before the
-bibliography in both postamble variants (§4.5).
+emitted immediately before the bibliography in both postamble variants
+(§4.5) — **not** `%TC:ignore`-wrapped (fixed 2026-09-15; see §3 and §7):
+AMS's published word limit counts acknowledgments toward the total.
+
+### 4.10 Appendix (`extract_appendix`, `_build_appendix_block`; added 2026-09-15)
+
+Author marker (in the Beamer source): a `\section{...}` whose title begins
+with "Appendix" (`is_appendix_section`, shared with AGU in
+`beamer_common.py`), e.g. `\section{Appendix}` or
+`\section{Appendix A: Derivation details}`. Anchored at the start of the
+title — stricter than `is_si_section`'s unanchored search — so an ordinary
+section like `\section{Notes on the appendix}` is not mistaken for the
+marker.
+
+`extract_appendix(events)` consumes that marker and every event up to the
+SI section marker (or end of list) and splits the range into one or more
+appendices:
+
+- Each subsequent top-level `\section{...}` in the range opens a new
+  appendix; its title is the section title with a leading
+  `Appendix`/`Appendix A` prefix and separator stripped (`_appendix_title`)
+  — empty after stripping (bare `\section{Appendix}`) means no title;
+  **no placeholder stub** (fixed 2026-09-15 — see §4.10 and §7: an earlier
+  version fell back to a literal "Appendix title here." stub, mirroring
+  `_ENDMATTER_STUBS`, but unlike ACKS/DATA there's nothing required to fill
+  in here).
+- `\subsection{...}` events, `'frame'` events, and ordinary `'passthrough'`
+  events (`\clearpage`, figure/table counter resets) accumulate into the
+  current appendix unchanged.
+- A bare `\bibliography{}`/`\bibliographystyle{}` passthrough inside the
+  range is **not** treated as appendix content — decks commonly place these
+  just before the SI section, which would otherwise land the canonical
+  bibliography command inside the last appendix's own assembled body and
+  duplicate it once the converter injects its own copy (real bug, found and
+  fixed while adding this feature: `tests/test_input.tex`'s existing
+  `check('bibliography', ..., n_bib == 1)` assertion catches a regression).
+
+`_build_appendix_block(appendices)` builds the AMS output
+(`ams/ametsocV6.1.cls:1146-1183`, `ams/AMS LaTeX Package V6.1/templateV6.1.tex:190-211`):
+a single appendix is unlettered (bare `\appendix`, matching the template's
+"if only one appendix, use `\appendix`"); two or more get
+`\appendix[A]`, `\appendix[B]`, … `\appendixtitle{...}` is emitted only when
+`_appendix_title` produced a non-empty title (**fixed 2026-09-15**: a bare
+`\section{Appendix}` — no title beyond the marker itself — previously got a
+literal `\appendixtitle{Appendix title here.}` stub rendered into the PDF;
+the template's "Appendix title is necessary!" comment is authorial guidance,
+not a class requirement — `\appendix` alone already typesets "APPENDIX"/
+"APPENDIX A" — so there is nothing to placeholder-fill when the author gave
+none). Each appendix's own content is `assemble_body(events,
+figure_opts=_AMS_FIGURE_OPTS)` — same figure/caption handling as the main
+body (captions get the normal per-caption `%TC:ignore`).
+
+Injection point: between the endmatter and the bibliography, in both
+postamble branches (§4.5, §4.9) — AMS template order is Acknowledgments →
+Data statement → Appendix → References.
+
+Compile-verified against the real class: bare `\appendix` and a lettered
+`\appendix[A]` … `\appendix[B]` (no explicit `\end{appendix}`/`\endappendix`
+between them) both compile clean with `pdflatex`+`bibtex`, despite the class
+declaring `appendix` via `\newenvironment` and unconditionally loading the
+unrelated third-party `appendix` package (which warns "No `\appendix`
+command in this document class!" at package-load time — a pre-existing,
+unconditional, harmless warning: the class's own later `\newenvironment`
+definition supersedes the package's, regardless of whether `\appendix` is
+ever invoked; confirmed present even in a real compiled log with no
+appendix content, `examples/enso-global-temperature-slides-v5_manuscript.log:548`).
+
+**Known limitation, recorded not fixed (§6):** appendix figure files from
+`extract_main.py`/`make_single_figure.sh` are still named sequentially
+(`figN.pdf`) in document order, not `figA1.pdf`-style; journals often want
+the latter.
+
+**Known limitation, recorded not fixed (§6, 2026-09-15, user-reported,
+deferred by user's own choice):** a trailing `\label{}` on the appendix
+marker section (or on a later `\section{}` that opens a subsequent
+appendix), e.g. `\section{Appendix}\label{sec:appendix}`, is silently
+dropped — `extract_appendix`/`_appendix_title` extract only the title text
+from that event, discarding anything else in its content. `\ref{}` to such
+a label resolves to `??`. Even if the label were preserved, AMS's
+`\appendix`/`\appendix[A]` doesn't call `\refstepcounter` or touch
+`\@currentlabel` (unlike AGU's `\section{}`, a real sectioning command), so
+a naively-preserved label would silently resolve to whatever `\@currentlabel`
+last held (the previous real `\section{}`) rather than to anything
+appendix-related — worse than the current `??`. A correct fix would need to
+manually set `\@currentlabel` (`\makeatletter\def\@currentlabel{Appendix
+A}\makeatother`) before the label, which the AGU class does internally for
+its own `\appendix` but AMS's does not. **Workaround available today:**
+attach the label to a `\subsection{}` inside the appendix instead of the
+marker section — `\subsection{}` events pass through verbatim (label
+intact) and do correctly `\refstepcounter`, in both formats.
 
 ---
 
@@ -380,6 +484,11 @@ bibliography in both postamble variants (§4.5).
 | `\section*{...}` | Captured as section event (same as `\section{...}`); appears in output as-is |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
 | `\item` whose text ends in a display-math block that already ends in `\,.` (or other terminal punctuation) before `\]`/`\end{equation}`/`$$` | No period appended after the closer — `_item_needs_period` checks punctuation before the closer, not the literal last character. Previously produced a doubled period (`\,.\n\].`) |
+| `\section{Appendix...}` present (§4.10) | Consumed by `extract_appendix`; one appendix → unlettered `\appendix`, two+ → `\appendix[A]`, `\appendix[B]`, …, each with `\appendixtitle{}`, inserted between endmatter and the bibliography |
+| Bare `\bibliography{}`/`\bibliographystyle{}` sitting between the appendix marker and the SI section | Left out of appendix content (`extract_appendix`'s `leftover` list), not swept into the last appendix's assembled body — see §4.10 |
+| Appendix figure files from `extract_main.py`/`make_single_figure.sh` | Named sequentially (`figN.pdf`, document order), not `figA1.pdf`-style. Recorded limitation, not fixed — see §4.10 |
+| AMS's published word limit (body, acknowledgments, appendixes counted; title page, abstract, references, captions, tables, figures excluded) | The endmatter block is no longer `%TC:ignore`-wrapped (fixed 2026-09-15, previously under-counted); appendix content is never wrapped either — see §3 |
+| `\label{}` on the appendix marker section (or a later `\section{}` opening a subsequent appendix) | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.10. Workaround: attach the label to a `\subsection{}` inside the appendix instead |
 
 ---
 
@@ -436,3 +545,7 @@ bibliography in both postamble variants (§4.5).
 | 2026-08-20 | `_build_preamble` now emits `\usepackage[T1]{fontenc}` as the first line after `\documentclass`. Root cause: `ametsocV6.1.cls` loads `mathptmx`/`newtxtext` (Times-like PostScript fonts) but never loads `fontenc` itself; under the default OT1 encoding, non-ASCII text-mode commands like `\l` have no OT1-encoded glyph in the newtx font and silently fall back to a mismatched Computer Modern substitute mid-word, breaking spacing (e.g. a `P{\l}otka` author surname rendered as two words, "P lotka", instead of "Płotka"). Reproduced and confirmed by compiling a minimal manuscript against the real `ametsocV6.1.cls` + `ametsocV6.bst` with and without T1 (log showed `Font shape 'OT1/ntxtlf/m/n' will be [substituted]`); fix verified to correct the rendering. AGU's `agujournal2019.cls` was checked and does not load Times fonts by default (newtxtext commented out there), so `beamer_to_agu.py` was left unchanged. | Yes |
 | 2026-08-22 | Shared: `_restructure_figures`' pass-through branch for a pre-existing `\begin{figure}...\end{figure}` block called `re.search(r'\\end\{figure\}', text, fig_begin)` — the third positional arg to `re.search` is `flags`, not a start position (only a compiled pattern's `.search(string, pos)` takes one), so `fig_begin` (a large int match offset) was being interpreted as a flags bitmask. For most offsets this was silently harmless, but when its bits happened to collide with `re.LOCALE`, Python raises `ValueError: cannot use LOCALE flag with a str pattern`. Real-world repro: `enso-global-temperature-slides-v7.tex`, which has a hand-written `\begin{figure}` block (the composite-maps frame) at an offset that triggered the collision; the otherwise-identical v6 deck didn't hit a bad offset. Fixed by compiling `fig_end_re = re.compile(r'\\end\{figure\}')` once and calling `fig_end_re.search(text, fig_begin)`. Output byte-identical for both example decks and for a full v6/v7 conversion; `tests/run_tests.py` passes. **Regression test added same day** (`check_restructure_figures_passthrough_unit`, a `code-review high` finding — the original fix shipped with no coverage of the exact crashing branch): a fixture with `\begin{figure}` at offset 4 (`re.LOCALE`'s bit set), confirmed to raise the original `ValueError` when run against the pre-fix code, asserts the pass-through block is unchanged and a following bare `\includegraphics` is still wrapped | Yes |
 | 2026-08-22 | Fixed duplicate `\bibliography{}` when the source places it outside a frame: `build_event_list` already captures it as a `passthrough` event, and the converter separately injects an explicit copy before/after the SI boundary — previously the passthrough-filter (dropping the parsed copy) ran only inside the `if supp_idx is not None:` branch, so a no-SI manuscript with an outside-frame `\bibliography{}` got two copies and bibtex aborted on the repeated `\bibdata` entry (ultrareview finding, ~5-10 min cloud review of commit b3863d0). Hoisted the filter above the branch so it always runs. Same-day fix applied to `beamer_to_agu.py` (see its sync log). **Regression test added same day**: `check_manuscript` now asserts exactly one `\bibliography{refs}` in `tests/test_input.tex`'s output (already places the bibliography outside a frame — the SI-present branch, already covered by the pre-existing filter); `check_no_si_paths` extended with a `\bibliography{}` in `_NO_SI_DECK` and a `beamer_to_ams.py` no-SI conversion pass asserting the count — confirmed to fail (count=2) against the pre-fix code | Yes |
+| 2026-09-15 | Added appendix support (§4.10): shared `is_appendix_section`/`_appendix_title`/`extract_appendix` in `beamer_common.py`, `_build_appendix_block` here — reverses the 2026-07-13 scoping decision that appendices were author-driven and out of scope. Compile-verified against the real `ametsocV6.1.cls`+`ametsocV6.bst` (bare `\appendix` and a two-appendix `\appendix[A]`…`\appendix[B]` sequence both compile clean, `pdflatex`×3+`bibtex`) and `texcount`-verified (appendix prose counted, appendix captions not, no ignore-toggle errors — see §3). While building this, found and fixed a real bug via a real-world-shaped test fixture: a bare `\bibliography{}` sitting between the appendix content and the SI section (a common deck layout) was getting swept into the last appendix's own body by a naive "everything to the SI boundary belongs to the appendix" walk, duplicating the converter's injected bibliography — caught by the pre-existing `check_manuscript` bibliography-count assertion once an appendix section was added to `tests/test_input.tex`. Fixed by excluding bare `\bibliography{}`/`\bibliographystyle{}` passthrough events from appendix consumption in `extract_appendix`. **Regression tests added same day**: appendix section (2 appendices, 1 figure, 1 subsection) added to `tests/test_input.tex` with ordering/content assertions in `check_manuscript`; new `check_appendix_paths` (single unlettered appendix, no-SI branch, `extract_main.py --no-si` retention) registered in `unit_sections`; appendix block added to `tests/test_main_si.tex`/`.aux` (`A1` ref) with retention/non-SI-classification assertions in `check_extract_main`. Output diffed against the pre-change converter on both example decks: AGU byte-identical, AMS differs by exactly the two lines removed in the next row | Yes |
+| 2026-09-15 | Fixed AMS word-count under-count: `_build_endmatter` (acknowledgments + data statement) was wrapped in `%TC:ignore`/`%TC:endignore`, and its docstring claimed AMS's word limit "excludes acknowledgments and the data availability statement." Confirmed via two independent web searches of AMS author guidance that this is backwards — the published 7500-word limit **counts** body text, acknowledgments, and appendixes, excluding only the title page, abstract, references, captions, tables, and figures (`ametsoc.org` returns 403 to direct fetches, so this is search-sourced). Removed the outer ignore pair; the data statement is counted too, by conservative reading (not named on either side of the exclusion list; over-counting costs a trim, not a bounced submission). This also removes a latent instance of the 2026-07-08 toggle-desync bug class: a captioned figure inside an `ACKS`/`DATA` sentinel frame was emitting a per-caption `%TC:ignore` nested inside this now-removed outer one. Verified on the real `enso-global-temperature-slides-v5.tex` example deck: `texcount -sum` rose from 2587 to 2614 words (the acknowledgments text), zero errors. **Regression test added same day**: `check_manuscript` asserts `%TC:ignore` no longer immediately precedes `\acknowledgments` | Yes |
+| 2026-09-15 | Fixed appendix-title placeholder leaking into real PDF output (user-reported same day, on a compiled AMS manuscript screenshot): a bare `\section{Appendix}` with no title text beyond the marker itself was falling back to a literal `\appendixtitle{Appendix title here.}` stub — visibly wrong in the compiled output, unlike the ACKS/DATA sentinel stubs it was modeled on (which fill a field AMS actually requires; an appendix title is not required — `\appendix` alone already typesets "APPENDIX"/"APPENDIX A", and the template's "Appendix title is necessary!" comment is authorial guidance, not enforced by the class). Fixed by emitting `\appendixtitle{...}` only when `_appendix_title` returned a non-empty string. **Regression test added same day**: `check_appendix_paths` (already using a bare `\section{Appendix}` fixture) now asserts no `\appendixtitle` and no "Appendix title here" text in AMS output | Yes |
+| 2026-09-15 | User asked whether `\label{}` on the appendix marker (e.g. `\section{Appendix}\label{sec:appendix}`) resolves via `\ref{}`. Investigated and confirmed no code change was needed to answer it, but found and documented a real limitation rather than just answering in the abstract: the label is silently dropped (`_appendix_title` extracts only the title, discards the rest of the marker event's content), and even if preserved, AMS's `\appendix` doesn't call `\refstepcounter`/set `\@currentlabel` the way AGU's `\section{}` does, so a naive fix would silently resolve to the wrong section number rather than erroring loudly. **User explicitly deferred the fix** ("Let's leave this for now") — recorded as a known limitation with a working workaround (label a `\subsection{}` inside the appendix instead) rather than fixed | Yes |

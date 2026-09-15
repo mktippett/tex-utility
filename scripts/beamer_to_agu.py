@@ -12,6 +12,7 @@ If no output file is given, writes to <input_stem>_agu.tex.
 """
 
 import re
+import string
 import sys
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from beamer_common import (
     preprocess_body,
     build_event_list,
     extract_abstract,
+    extract_appendix,
     extract_email,
     extract_key_points,
     extract_plain_language_summary,
@@ -384,6 +386,31 @@ _AGU_FIGURE_OPTS = {
 }
 
 
+def _build_appendix_block(appendices):
+    r"""
+    \appendix + one \section{Title} per appendix (agujournal2019.cls), for
+    the appendix(es) extracted by extract_appendix. The class auto-letters
+    every section under \appendix mode ("Appendix A: Title", "Appendix B:
+    ..."), even for a single appendix -- unlike AMS, AGU has no unlettered
+    form, so a single appendix still renders as "Appendix A".
+
+    When the author gave no title beyond "Appendix"/"Appendix A" (e.g. bare
+    \section{Appendix}), \section{} is emitted with an empty argument --
+    agujournal2019.cls's \@seccntformat prints \thesection followed by two
+    spaces, no colon or other separator, so an empty title just renders as
+    "Appendix A" with harmless trailing space; no placeholder needed.
+    """
+    if not appendices:
+        return ''
+    parts = [r'\appendix']
+    for title, ev in appendices:
+        parts.append(r'\section{' + title + '}')
+        body = assemble_body(ev, figure_opts=_AGU_FIGURE_OPTS)
+        if body.strip():
+            parts.append(body)
+    return '\n\n'.join(parts)
+
+
 def convert(input_path, output_path, journal=None):
     src = Path(input_path).read_text(encoding='utf-8')
 
@@ -416,6 +443,12 @@ def convert(input_path, output_path, journal=None):
 
     # --- Build event list (AGU: strip \bibliographystyle) -------------------
     events = build_event_list(body, keep_bibliographystyle=False)
+
+    # --- Appendix (template order: body -> Appendix -> Open Research/COI/
+    # Acknowledgments -> References -- opposite side of the endmatter from
+    # AMS) -------------------------------------------------------------------
+    appendices, events = extract_appendix(events)
+    appendix_block = _build_appendix_block(appendices)
 
     # --- Assemble endmatter from sentinel blocks (or stubs) -----------------
     # Each sentinel wraps a Beamer frame that renders in slides normally;
@@ -452,7 +485,11 @@ def convert(input_path, output_path, journal=None):
     # SI scaffold (cover page + checklist) only when the deck has an SI
     # section; a no-SI paper gets endmatter + bibliography and no %% SI_BEGIN
     # (run extract_main.py with --no-si on such a manuscript).
+    # Appendix goes ahead of the leading %TC:ignore -- unlike the endmatter/
+    # bibliography, it counts toward AGU's word count same as the main body.
     em_text = '%TC:ignore\n\n' + '\n\n'.join(endmatter_pieces) + '\n\n' + bib_line
+    if appendix_block:
+        em_text = appendix_block + '\n\n' + em_text
     if _supp_i is not None:
         si_header = _build_si_header(title_text, authors_block, affiliation_lines,
                                      n_si_figs=n_si_figs, n_si_tables=n_si_tables)
@@ -470,7 +507,8 @@ def convert(input_path, output_path, journal=None):
     events.sort(key=lambda x: x[0])
 
     # Move end-matter before any Supplemental section so references
-    # appear before the appendix in the output.
+    # appear before the SI in the output. (The appendix itself was already
+    # extracted above and lives ahead of em_text -- unaffected by this move.)
     supp_idx = next(
         (i for i, (_, etype, content) in enumerate(events)
          if etype == 'section' and is_si_section(content)),

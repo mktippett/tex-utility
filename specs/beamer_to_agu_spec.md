@@ -47,7 +47,11 @@ comment sentinel marking the SI boundary, consumed by
 main-text-only manuscript. The SI scaffold (sentinel, cover page,
 "Contents of this file" checklist) is emitted **only when the deck has a
 Supplemental section**; a no-SI deck ends after the bibliography (use
-`extract_main.py --no-si` on such a manuscript).
+`extract_main.py --no-si` on such a manuscript). The checklist's figure/table
+counts are the number of `\begin{figure}` / `\begin{table}` floats after
+`%% SI_BEGIN` in the assembled body (`_fill_si_checklist`, filling a
+placeholder left by `_build_si_header`), so a multi-panel frame counts as one
+figure.
 
 `%TC:ignore` / `%TC:endignore` markers are inserted for `texcount` compatibility:
 - Title block (title → key points): ignored
@@ -347,7 +351,7 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | Sentinels inside a frame body (not wrapping a frame) | `strip_frame_wrappers` finds no frame wrappers; content returned as-is |
 | End-matter after `\section{Supplemental…}` in source | Reordered to appear before Supplemental in output (`is_si_section` shared matcher: `supplement` or `supporting information`, case-insensitive) |
 | No Supplemental section | SI scaffold not emitted at all (no `%% SI_BEGIN`, no cover page, no checklist); output ends with endmatter + bibliography |
-| SI has figures but no `\fig{}`| Falls back to counting `\includegraphics{` in SI frame content |
+| SI frame with several `\includegraphics` (multi-panel) | One figure float → counted once in the SI checklist |
 | SI has tables via `\begin{table}` only (no `tabular`) | Falls back to counting `\begin{table` if `\begin{tabular` count is 0 |
 | `\subsection{...}` / `\subsection*{...}` outside a frame | Captured as a `section` event (same regex, `(?:sub)?section`); previously unmatched and silently dropped from output. Passes through verbatim — no promotion/demotion to `\section` |
 | `\section{Appendix...}` present (§4.11) | Consumed by `extract_appendix` (shared with AMS); one `\appendix` + one `\section{Title}` per appendix, prepended ahead of the endmatter — AGU template order is body → Appendix → endmatter → References |
@@ -400,3 +404,4 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | 2026-09-15 | Added appendix support (§4.11): shared `extract_appendix`/`is_appendix_section`/`_appendix_title` in `beamer_common.py` (see `beamer_to_ams_spec.md` §4.10 for the shared extraction algorithm and its bug-fix history), `_build_appendix_block` here — reverses the prior out-of-scope stance. Prepended to `em_text` before its leading `%TC:ignore` so it counts toward the body like the rest of the main text. Compile-verified against the real `agujournal2019.cls` with `apacite` (`pdflatex`×3+`bibtex`, two-appendix deck, clean exit). Output diffed against the pre-change converter on both example decks: byte-identical (AGU emits no `%TC:ignore`/endmatter change for this feature, unlike AMS — see its sync log for the parallel fix that does change AMS output) | Yes |
 | 2026-09-15 | Fixed appendix-title placeholder for a bare `\section{Appendix}` (no title beyond the marker) — same-day companion to the AMS fix (see `beamer_to_ams_spec.md` sync log, user-reported on a compiled AMS PDF). Was falling back to a literal `\section{Appendix title here.}`. `agujournal2019.cls`'s `\@seccntformat` prints `\thesection` + two spaces with no colon, so an empty title (`\section{}`) is harmless — just trailing whitespace after "Appendix A". Fixed by emitting the title as-is (possibly empty) instead of substituting a stub. **Regression test added same day**: `check_appendix_paths` asserts an empty `\section{}` and no "Appendix title here" text in AGU output | Yes |
 | 2026-09-15 | User asked whether `\label{}` on the appendix marker resolves via `\ref{}` — same-day companion investigation to the AMS row (see `beamer_to_ams_spec.md` sync log). Confirmed and documented that it's dropped here too, same shared root cause. Unlike AMS, AGU's own `\section{}` under `\appendix` mode already sets `\@currentlabel` correctly, so this side has a cleaner fix available (just preserve the label) whenever it's picked up. **User explicitly deferred the fix**; recorded as a known limitation with a working workaround (§6) rather than fixed | Yes |
+| 2026-09-23 | Fixed SI checklist over-count (user-reported: enso-global-temperature-slides-v10 gave "Figures S1 to S7" for 6 SI figures). The count was taken from raw SI frame text — `\fig{}` occurrences, falling back to `\includegraphics` only if none — so a two-panel frame counted twice, and mixed `\fig{}`/`\includegraphics` decks under-counted. `_build_si_header` now emits a placeholder; `_fill_si_checklist` replaces it after body assembly with counts of `\begin{figure*?}`/`\begin{table*?}` floats after `%% SI_BEGIN`. **Regression test added same day**: `tests/test_input.tex` SI gains a two-panel `\includegraphics` frame; `check_agu` expects "Figures S1 to S3" (old code gives S2) and no leftover placeholder | Yes |

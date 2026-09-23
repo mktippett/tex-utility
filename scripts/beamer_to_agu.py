@@ -232,10 +232,31 @@ def _make_si_checklist(n_figs, n_tables):
     return '\n'.join(lines)
 
 
-def _build_si_header(title, authors_block, affiliation_lines, n_si_figs=0, n_si_tables=0):
+_SI_CHECKLIST_PLACEHOLDER = '%% SI_CHECKLIST_PLACEHOLDER'
+
+
+def _fill_si_checklist(body):
+    """Replace the SI checklist placeholder with counts of the figure and
+    table floats that actually follow %% SI_BEGIN in the assembled body.
+
+    Counting floats (not raw \\includegraphics / tabular in the frames) keeps
+    a multi-panel frame -- one figure, several \\includegraphics -- at one.
+    """
+    if _SI_CHECKLIST_PLACEHOLDER not in body:
+        return body
+    si_text = body.split('%% SI_BEGIN', 1)[1]
+    n_figs = len(re.findall(r'\\begin\{figure\*?\}', si_text))
+    n_tables = len(re.findall(r'\\begin\{table\*?\}', si_text))
+    return body.replace(_SI_CHECKLIST_PLACEHOLDER,
+                        _make_si_checklist(n_figs, n_tables))
+
+
+def _build_si_header(title, authors_block, affiliation_lines):
     """Build the SI section header appended after \\bibliography{}.
 
     Uses $^N$ superscripts for affiliation markers (matching AGU SI style).
+    The Contents checklist is left as a placeholder; _fill_si_checklist()
+    fills it once the SI body has been assembled.
     """
     # \affil{N} -> $^N$ for SI-style inline superscripts
     si_authors = re.sub(r'\\affil\{(\d+)\}', lambda m: '$^' + m.group(1) + '$', authors_block)
@@ -247,8 +268,6 @@ def _build_si_header(title, authors_block, affiliation_lines, n_si_figs=0, n_si_
             text = re.sub(r'\s+', ' ', m.group(2)).strip()
             aff_items.append(r'\noindent $^' + m.group(1) + r'${' + text + '}')
     aff_block = '\n\n'.join(aff_items)
-
-    contents_boilerplate = _make_si_checklist(n_si_figs, n_si_tables)
 
     return '\n'.join([
         r'%% SI_BEGIN',
@@ -264,7 +283,7 @@ def _build_si_header(title, authors_block, affiliation_lines, n_si_figs=0, n_si_
         '',
         r'\end{center}',
         '',
-        contents_boilerplate,
+        _SI_CHECKLIST_PLACEHOLDER,
         '',
         r'\clearpage',
     ])
@@ -466,21 +485,11 @@ def convert(input_path, output_path, journal=None):
     bib_file = _extract_bib_file(src)
     bib_line = r'\bibliography{' + bib_file + '}'
 
-    # Count SI figures and tables for the checklist (scan before appending endmatter)
     _supp_i = next(
         (i for i, (_, etype, content) in enumerate(events)
          if etype == 'section' and is_si_section(content)),
         None
     )
-    n_si_figs, n_si_tables = 0, 0
-    if _supp_i is not None:
-        _si_raw = '\n'.join(c for _, t, c in events[_supp_i + 1:] if t == 'frame')
-        n_si_figs = len(re.findall(r'\\fig\{', _si_raw))
-        if n_si_figs == 0:
-            n_si_figs = len(re.findall(r'\\includegraphics(?:\[[^\]]*\])?\{', _si_raw))
-        n_si_tables = len(re.findall(r'\\begin\{tabular', _si_raw))
-        if n_si_tables == 0:
-            n_si_tables = len(re.findall(r'\\begin\{table', _si_raw))
 
     # SI scaffold (cover page + checklist) only when the deck has an SI
     # section; a no-SI paper gets endmatter + bibliography and no %% SI_BEGIN
@@ -491,8 +500,7 @@ def convert(input_path, output_path, journal=None):
     if appendix_block:
         em_text = appendix_block + '\n\n' + em_text
     if _supp_i is not None:
-        si_header = _build_si_header(title_text, authors_block, affiliation_lines,
-                                     n_si_figs=n_si_figs, n_si_tables=n_si_tables)
+        si_header = _build_si_header(title_text, authors_block, affiliation_lines)
         em_text += '\n\n' + si_header
 
     # Drop any \bibliography{} passthrough events already parsed from the body
@@ -550,6 +558,7 @@ def convert(input_path, output_path, journal=None):
     # --- AGU post-processing ------------------------------------------------
     manuscript_body = _remap_citations_to_apacite(manuscript_body)
     manuscript_body = _wrap_equations_linenomath(manuscript_body)
+    manuscript_body = _fill_si_checklist(manuscript_body)
 
     # --- Write output -------------------------------------------------------
     journal_name = journal or _extract_journal_name(src)

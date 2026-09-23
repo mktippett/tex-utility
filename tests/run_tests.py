@@ -162,7 +162,11 @@ def check_agu(text):
     # --- SI header ---
     check('SI clearpage+counter',      text, r'\\clearpage\s+\\setcounter\{page\}\{1\}')
     check('SI title',                  text, r'Supporting Information for')
-    check('SI figures S1 to S2',       text, r'\\item Figures S1 to S2')
+    # 3 SI figures: two \fig{} frames + one two-panel \includegraphics frame
+    # (counts floats, not graphics -- the two panels are one figure)
+    check('SI figures S1 to S3',       text, r'\\item Figures S1 to S3')
+    check('SI checklist placeholder filled', text, r'SI_CHECKLIST_PLACEHOLDER',
+          present=False)
     check('SI table S1 singular',      text, r'\\item Table S1')
     check('SI text commented out',     text, r'%\\item Text S1 to Sx')
 

@@ -117,6 +117,7 @@ def check_agu(text):
     check('intro section',             text, r'\\section\{Introduction\}')
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
+    check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
     check('conclusions section',       text, r'\\section\{Conclusions\}')
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
@@ -252,6 +253,7 @@ def check_manuscript(text):
     check('intro section',             text, r'\\section\{Introduction\}')
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
+    check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
     # tabular wrapped in a table float; AMS excludes table captions from the

@@ -37,6 +37,10 @@ _BEAMER_SETUP_RE = re.compile(
 # without a following "and") is preferred over the bare-'and' fallback.
 _AUTHOR_SEP_RE = re.compile(r'\s*\\and\b\s*|\s*,\s*and\s+|\s*,\s*|\s+and\s+')
 
+# Brace-balanced section-title body (up to two nesting levels), so titles like
+# \subsection{BSS$_\text{c}$} are not truncated at the first '}'.
+_TITLE = r'((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)'
+
 # Section titles that mark the start of Supporting Information content.
 # One matcher shared by both converters, consistent with extract_main.py's
 # fallback patterns ("Supplemental", "Supplement", "Supporting Information").
@@ -835,7 +839,7 @@ def build_event_list(body, keep_bibliographystyle=True):
     """
     events = []
 
-    for m in re.finditer(r'\\(?:sub)?section\*?\{([^}]*)\}(?:\s*\\label\{[^}]*\})?', body):
+    for m in re.finditer(r'\\(?:sub)?section\*?\{' + _TITLE + r'\}(?:\s*\\label\{[^}]*\})?', body):
         events.append((m.start(), 'section', m.group(0).strip()))
 
     frame_pat = re.compile(r'\\begin\{frame\}.*?\\end\{frame\}', re.DOTALL)
@@ -875,7 +879,7 @@ def extract_abstract(events):
     i = 0
     while i < len(events):
         _pos, etype, content = events[i]
-        sec_title_m = re.match(r'\\(?:sub)?section\*?\{([^}]*)\}', content)
+        sec_title_m = re.match(r'\\(?:sub)?section\*?\{' + _TITLE + r'\}', content)
         sec_title = sec_title_m.group(1).strip().lower() if sec_title_m else ''
         if etype == 'section' and sec_title == 'abstract':
             abstract_parts = []
@@ -907,7 +911,7 @@ def is_appendix_section(event_content):
     search, since "Appendix" is a common enough word that an unanchored
     match would misfire on ordinary section titles.
     """
-    m = re.match(r'\\section\*?\{([^}]*)\}', event_content)
+    m = re.match(r'\\section\*?\{' + _TITLE + r'\}', event_content)
     if not m:
         return False
     return bool(_APPENDIX_SECTION_RE.match(m.group(1)))
@@ -920,7 +924,7 @@ def _appendix_title(section_content):
     details". Returns '' when nothing is left (bare \section{Appendix} or
     \section{Appendix A}) -- callers supply a placeholder in that case.
     """
-    m = re.match(r'\\section\*?\{([^}]*)\}', section_content)
+    m = re.match(r'\\section\*?\{' + _TITLE + r'\}', section_content)
     title = m.group(1).strip() if m else ''
     return _APPENDIX_PREFIX_RE.sub('', title, count=1).strip()
 
@@ -1033,7 +1037,7 @@ def extract_key_points(events):
     while i < len(events):
         _pos, etype, content = events[i]
         if etype == 'section':
-            m = re.match(r'\\section\*?\{([^}]*)\}', content)
+            m = re.match(r'\\section\*?\{' + _TITLE + r'\}', content)
             title = m.group(1).strip().lower() if m else ''
             if 'key point' in title:
                 items = []
@@ -1062,7 +1066,7 @@ def extract_plain_language_summary(events):
     while i < len(events):
         _pos, etype, content = events[i]
         if etype == 'section':
-            m = re.match(r'\\section\*?\{([^}]*)\}', content)
+            m = re.match(r'\\section\*?\{' + _TITLE + r'\}', content)
             title = m.group(1).strip().lower() if m else ''
             if 'plain language' in title:
                 parts = []

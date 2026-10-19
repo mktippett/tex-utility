@@ -118,6 +118,17 @@ def check_agu(text):
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
     check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
+    check('beamer markup fully unwrapped', text,
+          r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
+    check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
+    check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
+    check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
+    check('nested textcolor kept',     text, r'\$x\^\{2\}\$ colored')
+    check('nested only kept',          text, r'\\emph\{overlay text\}')
+    check('nested structure kept',     text, r'\\textit\{structured\}')
+    check('escaped brace in arg',      text, r'open \\\{ brace\.')
+    check('setlength both args gone',  text, r'\{1em\}', present=False)
+    check('vspace* stripped',          text, r'\{2pt\}', present=False)
     check('conclusions section',       text, r'\\section\{Conclusions\}')
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
@@ -254,6 +265,17 @@ def check_manuscript(text):
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
     check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
+    check('beamer markup fully unwrapped', text,
+          r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
+    check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
+    check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
+    check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
+    check('nested textcolor kept',     text, r'\$x\^\{2\}\$ colored')
+    check('nested only kept',          text, r'\\emph\{overlay text\}')
+    check('nested structure kept',     text, r'\\textit\{structured\}')
+    check('escaped brace in arg',      text, r'open \\\{ brace\.')
+    check('setlength both args gone',  text, r'\{1em\}', present=False)
+    check('vspace* stripped',          text, r'\{2pt\}', present=False)
     check('figure environment',        text, r'\\begin\{figure\}')
     check('table environment',         text, r'\\begin\{tabular\}')
     # tabular wrapped in a table float; AMS excludes table captions from the
@@ -276,6 +298,8 @@ def check_manuscript(text):
     check('SI titlepage title',        text, r'Full Test Title for Conversion Scripts')
     check('SI titlepage authors',      text,
           r'Author One\\aff\{a\}, Author Two\\aff\{b\}, and Author Three\\aff\{a\}')
+    check('SI titlepage nested-brace aff', text,
+          r"\\aff\{b\}Institute of Oceanography, Second Universit\{\\'e\}, Seattle")
     check('SI titlepage corr author',  text, r'Corresponding author\}: Author One, author@university\.edu')
     check('SI titlepage page reset',   text, r'\\setcounter\{page\}\{1\}')
     si_title_pos = text.find('Supplemental material for:')
@@ -600,6 +624,48 @@ Single unlettered appendix content.
 """
 
 
+_TEXT_ONLY_SI_DECK = r"""
+\documentclass{beamer}
+\title{Text-only SI Deck}
+\author{Solo Author}
+\institute{Some Institute}
+\begin{document}
+\section{Results}
+\begin{frame}{Result}
+Body text.
+\end{frame}
+
+\section{Supplemental}
+\begin{frame}{SI text}
+Supplemental text only, no figures or tables.
+\end{frame}
+\end{document}
+"""
+
+
+def check_text_only_si():
+    """AGU SI with no figure/table floats: every checklist item is commented
+    out, so the enumerate must be commented out too (an empty enumerate is a
+    LaTeX error)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        deck = Path(tmpdir) / 'text_si.tex'
+        deck.write_text(_TEXT_ONLY_SI_DECK)
+        out = Path(tmpdir) / 'text_si_agu.tex'
+        result = subprocess.run(
+            [PYTHON, str(SCRIPTS_DIR / 'beamer_to_agu.py'), str(deck), str(out)],
+            capture_output=True, text=True)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  text-only SI AGU convert exited '
+                             f'{result.returncode}:\n{result.stderr}')
+            return
+        text = out.read_text()
+        check('text-only SI: scaffold present', text, r'Supporting Information for')
+        check('text-only SI: no live enumerate', text,
+              r'^\\begin\{enumerate\}', present=False, flags=re.MULTILINE)
+        check('text-only SI: checklist kept as comment', text,
+              r'^%\\begin\{enumerate\}', flags=re.MULTILINE)
+
+
 def check_appendix_paths():
     """A deck with exactly one appendix section and no SI: both converters
     must emit an UNLETTERED \\appendix (not \\appendix[A]), and the appendix
@@ -799,6 +865,7 @@ def main():
         ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),
         ('no-SI conversion + --no-si (e2e)', check_no_si_paths),
         ('single appendix + --no-si (e2e)', check_appendix_paths),
+        ('text-only SI checklist (e2e)', check_text_only_si),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),
     ]
     for section, fn in unit_sections:

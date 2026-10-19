@@ -229,6 +229,10 @@ def _make_si_checklist(n_figs, n_tables):
         lines.append(r'\item Tables S1 to S' + str(n_tables))
     lines.append(r'%if Tables are larger than 1 page, upload as separate excel file')
     lines.append(r'\end{enumerate}')
+    if n_figs == 0 and n_tables == 0:
+        # Every item is commented out; an empty enumerate is a LaTeX error,
+        # so leave the whole checklist as a commented scaffold.
+        lines = [l if l.startswith('%') else '%' + l for l in lines]
     return '\n'.join(lines)
 
 

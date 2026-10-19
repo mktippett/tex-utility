@@ -20,7 +20,7 @@
 \institute[]{%
   \inst{1} Department of Atmospheric Science, Test University, Boulder, CO, USA
   \and
-  \inst{2} Institute of Oceanography, Second University, Seattle, WA, USA
+  \inst{2} Institute of Oceanography, Second Universit{\'e}, Seattle, WA, USA
 }
 
 \begin{document}
@@ -142,6 +142,17 @@ Right column content.
 
 % Nested braces in a section title must not truncate it at the first '}'
 \subsection{BSS$_\text{c}$ by lead}
+
+% Beamer markup whose arguments contain braces must be stripped/unwrapped
+% with balanced-brace matching, not truncated at the first '}'
+\begin{frame}{Nested Beamer markup}
+\framesubtitle{Subtitle with $x_{\text{a}}$}
+\alert{\textbf{Nested alert}} and \textcolor{red}{$x^{2}$ colored} and
+\only<2>{\emph{overlay text}} and \structure{\textit{structured}} and
+\alert{open \{ brace}.
+\setlength{\parskip}{1em}
+\vspace*{2pt}
+\end{frame}
 
 \begin{frame}{Main Figure}
 % \fig{} macro → \includegraphics via preprocess_body

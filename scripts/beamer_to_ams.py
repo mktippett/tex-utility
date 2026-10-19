@@ -22,6 +22,7 @@ from beamer_common import (
     _parse_inst_blocks,
     _extract_preamble_arg,
     _abbreviate_name,
+    _extract_brace_group,
     _extract_bib_file,
     _extract_bib_style,
     extract_passthrough_packages,
@@ -100,7 +101,10 @@ def _build_si_titlepage(title, authors, aff_block, email):
         author_parts.append(part)
     authors_line = ' '.join(author_parts)
 
-    aff_entries = re.findall(r'\\aff\{([a-z])\}\{([^}]+)\}', aff_block)
+    aff_entries = []
+    for m in re.finditer(r'\\aff\{([a-z])\}(?=\{)', aff_block):
+        text, _ = _extract_brace_group(aff_block, m.end())
+        aff_entries.append((m.group(1), text))
     aff_lines = [r'\aff{' + letter + '}' + re.sub(r'\s+', ' ', text).strip()
                  for letter, text in aff_entries]
     aff_block_text = '\\\\\n'.join(aff_lines)

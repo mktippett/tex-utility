@@ -96,6 +96,9 @@ def _extract_brace_group(text, start):
     depth = 0
     i = start
     while i < len(text):
+        if text[i] == '\\':
+            i += 2  # skip escaped char, so \{ and \} don't count
+            continue
         if text[i] == '{':
             depth += 1
         elif text[i] == '}':
@@ -104,6 +107,43 @@ def _extract_brace_group(text, start):
                 return text[start + 1:i], i + 1
         i += 1
     return text[start + 1:], len(text)  # unmatched opening brace
+
+
+def _rewrite_command(text, cmd, n_args, keep=None, star=False):
+    r"""
+    Rewrite every \cmd[<overlay>][[opt]]{arg1}...{argN} in text, with
+    brace-balanced argument matching (nested braces of any depth).
+
+    keep : index of the argument whose content replaces the whole command,
+           or None to delete the command entirely.
+    star : also match \cmd*.
+
+    An occurrence lacking all n_args brace groups is left untouched. The
+    replacement is rescanned, so nested uses (\alert{\alert{x}}) unwrap too.
+    """
+    head_re = re.compile(
+        r'\\' + re.escape(cmd) + (r'\*?' if star else '') +
+        r'(?![a-zA-Z])(?:\s*<[^>]*>)?(?:\s*\[[^\]]*\])?')
+    i = 0
+    while True:
+        m = head_re.search(text, i)
+        if not m:
+            return text
+        pos = m.end()
+        args = []
+        for _ in range(n_args):
+            while pos < len(text) and text[pos] in ' \t':
+                pos += 1
+            if pos >= len(text) or text[pos] != '{':
+                break
+            arg, pos = _extract_brace_group(text, pos)
+            args.append(arg)
+        if len(args) < n_args:
+            i = m.end()
+            continue
+        repl = args[keep] if keep is not None else ''
+        text = text[:m.start()] + repl + text[pos:]
+        i = m.start()
 
 
 def _strip_font_size_cmds(text):
@@ -199,15 +239,13 @@ def _convert_captionof(text):
 # ---------------------------------------------------------------------------
 
 def strip_beamer_command(text, cmd):
-    """Remove \\cmd{...} entirely (simple, non-nested)."""
-    pattern = r'\\' + re.escape(cmd) + r'\{[^{}]*\}'
-    return re.sub(pattern, '', text)
+    """Remove \\cmd{...} entirely (nested braces allowed)."""
+    return _rewrite_command(text, cmd, 1)
 
 
 def unwrap_beamer_command(text, cmd):
-    """Replace \\cmd{content} with just content (simple, non-nested)."""
-    pattern = r'\\' + re.escape(cmd) + r'\{([^{}]*)\}'
-    return re.sub(pattern, r'\1', text)
+    """Replace \\cmd{content} with just content (nested braces allowed)."""
+    return _rewrite_command(text, cmd, 1, keep=0)
 
 
 def strip_environment(text, env):
@@ -280,7 +318,7 @@ def extract_frames(body):
                 raw = raw[:ft_m.start()] + raw[ft_end:]
 
         # Strip \framesubtitle
-        raw = re.sub(r'\\framesubtitle\{[^}]*\}', '', raw)
+        raw = _rewrite_command(raw, 'framesubtitle', 1)
 
         frames.append({'title': title, 'content': raw})
 
@@ -325,23 +363,23 @@ def transform_content(content, figure_opts=None):
     content = _strip_font_size_cmds(content)
 
     # --- 2. Strip overlay/transition commands that produce no text ----------
-    for cmd in ['pause', 'newpage', 'medskip', 'bigskip', 'smallskip',
-                'vspace', 'hspace', 'vfill', 'hfill', 'centering',
-                'noindent', 'raggedright', 'raggedleft',
-                'setlength', 'addtolength',
-                'bibliographystyle', 'bibliography']:
-        content = re.sub(r'\\' + re.escape(cmd) + r'(\{[^}]*\})?(\[[^\]]*\])?', '', content)
+    # (command, number of brace arguments)
+    for cmd, n_args in [('pause', 0), ('newpage', 0), ('medskip', 0),
+                        ('bigskip', 0), ('smallskip', 0),
+                        ('vspace', 1), ('hspace', 1), ('vfill', 0), ('hfill', 0),
+                        ('centering', 0), ('noindent', 0),
+                        ('raggedright', 0), ('raggedleft', 0),
+                        ('setlength', 2), ('addtolength', 2),
+                        ('bibliographystyle', 1), ('bibliography', 1)]:
+        content = _rewrite_command(content, cmd, n_args, star=True)
 
     # Strip \only<...>{...}, \visible<...>{...}, etc. -> keep content
     for cmd in ['only', 'visible', 'uncover', 'onslide', 'temporal']:
-        content = re.sub(
-            r'\\' + re.escape(cmd) + r'(<[^>]*>)?\{([^{}]*)\}',
-            r'\2', content
-        )
+        content = _rewrite_command(content, cmd, 1, keep=0)
 
     # \alert{x} -> x,  \textcolor{c}{x} -> x
     content = unwrap_beamer_command(content, 'alert')
-    content = re.sub(r'\\textcolor\{[^}]*\}\{([^{}]*)\}', r'\1', content)
+    content = _rewrite_command(content, 'textcolor', 2, keep=1)
 
     # \structure{x} -> x
     content = unwrap_beamer_command(content, 'structure')

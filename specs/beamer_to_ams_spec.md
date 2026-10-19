@@ -268,9 +268,19 @@ Applied to each frame's raw content string in order:
    `\huge`, `\Huge`, `\bfseries`, `\itshape`, etc., and
    `\fontsize{S}{B}\selectfont`.
 2. **Spacing/transition commands** — strip `\pause`, `\newpage`, `\medskip`,
-   `\vspace{...}`, `\centering`, `\noindent`, `\setlength`, etc.
+   `\vspace{...}`, `\centering`, `\noindent`, `\setlength{..}{..}`, etc.,
+   each with its full argument count (`\setlength`/`\addtolength` take two;
+   starred forms like `\vspace*` included).
 3. **Overlay commands** — `\only<>{}`, `\visible<>{}`, etc. → keep content.
 4. **Unwrap** — `\alert{x}` → `x`; `\textcolor{c}{x}` → `x`; `\structure{x}` → `x`.
+
+Steps 2–4 and `\framesubtitle` stripping (in `extract_frames`) all go through
+`_rewrite_command` in `beamer_common.py`: optional `<overlay>` and `[opt]`,
+then N brace-balanced arguments (any nesting depth; escaped `\{`/`\}` not
+counted); an occurrence missing its arguments is left untouched (e.g. the
+switch form `\onslide<2>`). Whitespace after the command is consumed only as
+part of a following `<...>`/`[...]`, so a paragraph break after `\newpage` is
+kept.
 5. **Column/minipage tags** — strip `\begin{columns}`, `\column{...}`,
    `\begin{minipage}{...}`, `\end{minipage}` (keep content).
 6. **Figure restructuring** — `_restructure_figures`:
@@ -466,6 +476,8 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | `\captionof` with nested braces (`\ref{}`, `\textbf{}`, `\fontsize{}{}`) | Handled by `_convert_captionof` using `_extract_brace_group` |
 | `\%` in source text | Comment regex uses `(?<!\\)%` so `\%` is preserved |
 | Frame title containing `\ref{fig:xxx}` | Balanced brace extraction handles nested `{}` in titles |
+| `\alert`/`\structure`/`\only`/`\textcolor`/`\framesubtitle` with nested braces in the argument | `_rewrite_command` brace-balanced matching (2026-10-19) |
+| SI title-page affiliation with braces (`Universit{\'e}`) | `\aff{x}{...}` read with `_extract_brace_group` (2026-10-19) |
 | Section/subsection title with nested braces (`\subsection{BSS$_\text{c}$}`) | Shared `_TITLE` pattern in `beamer_common.py` matches up to two nesting levels; all six section-title regexes use it (2026-10-15) |
 | `[allowframebreaks]` option prefix | `extract_frames` strips the full `[opt]{title}` prefix using `raw = raw[leading_ws + end:]` |
 | Multiple `\includegraphics` side-by-side | Consecutive images (whitespace-separated) collected into one `\begin{figure}` |
@@ -551,3 +563,4 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | 2026-09-15 | Fixed appendix-title placeholder leaking into real PDF output (user-reported same day, on a compiled AMS manuscript screenshot): a bare `\section{Appendix}` with no title text beyond the marker itself was falling back to a literal `\appendixtitle{Appendix title here.}` stub — visibly wrong in the compiled output, unlike the ACKS/DATA sentinel stubs it was modeled on (which fill a field AMS actually requires; an appendix title is not required — `\appendix` alone already typesets "APPENDIX"/"APPENDIX A", and the template's "Appendix title is necessary!" comment is authorial guidance, not enforced by the class). Fixed by emitting `\appendixtitle{...}` only when `_appendix_title` returned a non-empty string. **Regression test added same day**: `check_appendix_paths` (already using a bare `\section{Appendix}` fixture) now asserts no `\appendixtitle` and no "Appendix title here" text in AMS output | Yes |
 | 2026-09-15 | User asked whether `\label{}` on the appendix marker (e.g. `\section{Appendix}\label{sec:appendix}`) resolves via `\ref{}`. Investigated and confirmed no code change was needed to answer it, but found and documented a real limitation rather than just answering in the abstract: the label is silently dropped (`_appendix_title` extracts only the title, discards the rest of the marker event's content), and even if preserved, AMS's `\appendix` doesn't call `\refstepcounter`/set `\@currentlabel` the way AGU's `\section{}` does, so a naive fix would silently resolve to the wrong section number rather than erroring loudly. **User explicitly deferred the fix** ("Let's leave this for now") — recorded as a known limitation with a working workaround (label a `\subsection{}` inside the appendix instead) rather than fixed | Yes |
 | 2026-10-15 | Fixed section titles truncated at the first `}` (user-reported: `neuralGCM-TC/slides-paper-outline-v5.tex` → `\subsection{BSS$_\text{c}` in output, pdflatex fatal "File ended while scanning use of `\@xdblarg`"). All six section-title regexes in `beamer_common.py` (`build_event_list`, `extract_abstract`, `is_appendix_section`/`_appendix_title`, and the two SI/appendix walks) used `\{([^}]*)\}`; replaced with a shared brace-balanced `_TITLE` pattern (two nesting levels). Shared code, so AGU had the same bug. **Regression test added same day**: `\subsection{BSS$_\text{c}$ by lead}` in `tests/test_input.tex` Results, asserted intact in both `check_agu` and `check_manuscript` — confirmed to fail against the pre-fix code | Yes |
+| 2026-10-19 | Brace-nesting audit of every `[^}]*` regex (follow-up to the 2026-10-15 section-title fix); fixed four more cases, all shared code except the SI affiliation. (1) `\framesubtitle{$x_{\text{a}}$}` was cut at the first `}`, leaving `}$}` in the body → "Too many }'s". (2) `\alert`/`\structure`/`\only`/`\visible`/`\uncover`/`\onslide`/`\temporal`/`\textcolor` with nested-brace arguments weren't unwrapped (`[^{}]*` didn't match) and reached the article class undefined — closes the 2026-07-07 known gap. (3) `\setlength{a}{b}`/`\addtolength` lost only their first argument (stray `{1em}` printed); `\vspace*` left `*{..}`. (4) `_build_si_titlepage` re-parsed `\aff{a}{...}` with `[^}]+`, truncating `Universit{\'e}`. Fix: new `_rewrite_command` helper (§4.6) for (1)–(3); `_extract_brace_group` for (4) and it now skips escaped `\{`/`\}`. Audited and left alone: block titles (regex cut but replacement re-closes the brace, output correct), `_BEAMER_SETUP_RE` (outside-frame text never reaches output), path/key/label patterns. Verified: two audit decks compile clean in both classes (failed before); 13 real decks × 2 formats byte-identical old vs new (that diff caught and fixed a first-draft bug where the helper swallowed the blank line after `\newpage`, merging paragraphs). **Regression tests added same day**: nested-markup frame and accented institute in `tests/test_input.tex`, checked in `check_agu` and `check_manuscript`, plus SI title-page affiliation check — all confirmed to fail on pre-fix code | Yes |

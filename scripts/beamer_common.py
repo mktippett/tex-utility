@@ -764,6 +764,7 @@ def _parse_inst_blocks(src):
       inst_nums: ordered list of inst numbers referenced by authors
                  (empty when no \\inst markup is present)
     The caller handles the no-\\inst fallback (default text differs by format).
+    parsed is never empty: a missing \\author{} yields [('First Last', None)].
     """
     author_raw = _extract_preamble_arg(src, 'author') or ''
     raw_authors = [a.strip() for a in _AUTHOR_SEP_RE.split(author_raw) if a.strip()]
@@ -774,6 +775,10 @@ def _parse_inst_blocks(src):
             parsed.append((entry[:inst_m.start()].strip(), int(inst_m.group(1))))
         else:
             parsed.append((entry.strip(), None))
+    if not parsed:
+        # No \author{} (or an empty one): placeholder, like the affiliation
+        # placeholder callers emit when \institute{} is absent.
+        parsed = [('First Last', None)]
 
     institute_raw = _extract_preamble_arg(src, 'institute') or ''
     institute_raw = re.sub(r'(?<!\\)%[^\n]*', '', institute_raw)

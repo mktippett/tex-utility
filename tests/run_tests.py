@@ -528,6 +528,21 @@ def check_noinst_fallback_unit():
         _failures.append('  FAIL  no-inst AGU: expected one shared '
                          f'affiliation, got {aff_lines}')
 
+    # No \author{} at all: placeholder author in both formats (AGU used to
+    # raise IndexError; AMS emitted an empty \authors{})
+    no_author_src = '\\documentclass{beamer}\n\\title{T}\n\\begin{document}\n\\end{document}\n'
+    try:
+        authors, _ = _parse_authors_affiliations(no_author_src)
+        if authors != [('First Last', 'a')]:
+            _failures.append(f'  FAIL  no-author AMS: expected placeholder, got {authors}')
+        authors_block, _, corr = _parse_authors_affiliations_agu(no_author_src)
+        check('no-author AGU placeholder', authors_block,
+              r'\\authors\{First Last\\affil\{1\}\}')
+        if corr[0] != 'First Last':
+            _failures.append(f'  FAIL  no-author AGU: corresponding author {corr}')
+    except Exception as exc:
+        _failures.append(f'  FAIL  no-author parse raised {exc!r}')
+
 
 _NO_SI_DECK = r"""
 \documentclass{beamer}

@@ -63,6 +63,7 @@ main text, and `paper-SI.pdf` for the SI.
 | `scripts/split_pdf.py` | Split a compiled PDF into main text and SI at a given page |
 | `scripts/make_single_figure.sh` | Extract each manuscript figure into its own `figN.pdf` file |
 | `scripts/bib_for_ams.py` | Write an AMS copy of a full-journal-name `.bib` with journal names abbreviated from a `full,ams` CSV (driven by `make` in `~/tex/bib`) |
+| `scripts/bib_add_doi.py` | Find missing `@article` DOIs via Crossref (`find` → accept/review TSVs, cached) and insert reviewed ones into the `.bib` (`apply`, with dated backup) |
 
 ### Class files
 

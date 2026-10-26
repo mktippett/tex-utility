@@ -62,6 +62,7 @@ main text, and `paper-SI.pdf` for the SI.
 | `scripts/extract_main.py` | Split a combined main+SI `.tex` into a main-text-only manuscript with SI `\ref{}`s flattened and figures extracted |
 | `scripts/split_pdf.py` | Split a compiled PDF into main text and SI at a given page |
 | `scripts/make_single_figure.sh` | Extract each manuscript figure into its own `figN.pdf` file |
+| `scripts/bib_for_ams.py` | Write an AMS copy of a full-journal-name `.bib` with journal names abbreviated from a `full,ams` CSV (driven by `make` in `~/tex/bib`) |
 
 ### Class files
 

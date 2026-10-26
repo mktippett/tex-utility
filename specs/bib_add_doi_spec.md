@@ -76,12 +76,22 @@ same TSV is a no-op.
 
 ## 7. Open items
 
-- **59 rows left in `~/tex/bib/doi/doi_review.tsv`.** About 35 likely have
-  no DOI (reports, web, newspaper, IMD memoirs, abstracts). About 25 are
-  real articles where Crossref returned the wrong paper (e.g. Kalnay96,
-  Uppala05, Saha2006, Zebiak1987, Kaplan1998, Knutson2010, the 1999 Tellus
-  non-normality papers). Decide whether to run a second title-only pass for
-  those and triage it the same way.
+- **OpenAlex fallback not in the script.** An ad hoc OpenAlex
+  (`api.openalex.org/works?search=title`) + DataCite pass over the 59
+  Crossref leftovers found 19 correct DOIs Crossref had mismatched
+  (Uppala05, Saha2006, Knutson2010, Kaplan1998, ...), plus 2 via corrected
+  Crossref titles (Kalnay96 title typo; Zebiak1987, whose Crossref title has
+  a garbled "Niño"). Decide whether to add OpenAlex as a `find` fallback for
+  rows that fail the Crossref checks, using the same title/year/author tests.
+- **~38 entries still without a DOI** (rows in
+  `~/tex/bib/doi/doi_review.tsv` not since applied): mostly reports,
+  conference preprints, IMD memoirs, web/newspaper, and the 1997–99
+  non-normality manuscripts. Notables: Camargo2007 (WMO Bulletin) has only
+  a Columbia repository DataCite DOI `10.7916/hthk-d786` (not added — decide
+  if repository DOIs are acceptable); PChang2007's bib title "A
+  Thermodynamic Trigger…" may be wrong (OpenAlex's Chang et al. 2007 GRL is
+  "Pacific meridional mode and El Niño–Southern Oscillation"); Liebmann1996
+  (BAMS) appears to have no registered DOI.
 - **Duplicate entries in `all.bib`** (~23 pairs, e.g. `Toth97`/`Toth1997`,
   `Dee98a`/`Dee99a`, `Kleeman2001`/`Kleeman2002`, `Black94`/`Black1994`);
   only one key of each pair has the DOI. Decide whether to merge (older
@@ -97,3 +107,4 @@ same TSV is a no-op.
 | Date | Change | Spec updated |
 |------|--------|-------------|
 | 2026-10-26 | Initial implementation: Crossref find (cached, resumable; title ≥ 0.95, year ±1, first-author checks; shared-DOI demotion; Deleted-DOIs skip) and apply (dated backup, skip existing/duplicate DOIs). First run on all.bib: 771 candidates → 632 + 59 DOIs applied after manual triage; 7 wrong journal fields and Majda2003 volume corrected from Crossref; Glahn1968 wrong DOI fixed | Yes |
+| 2026-10-26 | No code change. Ad hoc OpenAlex/DataCite second pass on Crossref leftovers: 21 more DOIs applied; Kalnay96 title typo and Liu97 author (→ Lui) corrected in all.bib; open items updated | Yes |

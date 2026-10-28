@@ -30,10 +30,21 @@ writes a main-text-only manuscript to an output directory:
     of \\bibliography{}, and \\bibliography{}/\\bibliographystyle{} are
     commented out, so main.tex compiles with pdflatex alone (no bibtex,
     no .bib database needed on the publisher's machine).
+  - Local .cls/.sty/.bst files that main.tex loads are copied into the
+    output directory (looked up next to COMBINED.tex, then in this repo's
+    ams/ and agu/); anything not found there is assumed installed.
+  - main.tex is compiled twice in the output directory with TEXINPUTS
+    unset, so a missing file fails here rather than at the publisher, and
+    the log is summarized (undefined refs/citations, overfull boxes).
+  - Build intermediates (make_single_figure.sh's main_figures.*, and
+    main.aux/.out/.log) are deleted, leaving main.tex, figN.pdf, the support
+    files, and main.pdf for checking. On a failed or unclean compile,
+    main.log is kept.
 
 Usage:
     python extract_main.py COMBINED.tex [COMBINED.aux] [--outdir DIR] \\
-        [--no-figures] [--no-bib] [--bbl COMBINED.bbl]
+        [--no-figures] [--no-bib] [--bbl COMBINED.bbl] [--no-si] \\
+        [--no-compile] [--keep-intermediates]
 
   COMBINED.aux defaults to <stem>.aux next to COMBINED.tex, and must be the
   .aux produced by compiling the *combined* document -- that's where the
@@ -49,18 +60,25 @@ Usage:
   --bbl defaults to <stem>.bbl next to COMBINED.tex, and must be the .bbl
   produced by running bibtex on the *combined* document.  --no-bib skips
   .bbl inlining and leaves \\bibliography{} live.
+
+  --no-compile skips the test compile of main.tex.  --keep-intermediates
+  skips deleting build intermediates.  Exit status is 1 if the test
+  compile fails.
 """
 
 import argparse
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
 MAKE_SINGLE_FIGURE = SCRIPT_DIR / 'make_single_figure.sh'
+# Where journal class files live when they aren't next to the input.
+SUPPORT_SEARCH_DIRS = [SCRIPT_DIR.parent / 'ams', SCRIPT_DIR.parent / 'agu']
 
 
 # ---------------------------------------------------------------------------
@@ -454,11 +472,148 @@ def inline_bbl(text, bbl_text):
 
 
 # ---------------------------------------------------------------------------
+# Support files, test compile, cleanup
+# ---------------------------------------------------------------------------
+
+_COMMENT_RE = re.compile(r'(?<!\\)%.*')
+_DOCUMENTCLASS_RE = re.compile(r'\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}')
+_USEPACKAGE_RE = re.compile(r'\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}')
+_LIVE_BIBSTYLE_RE = re.compile(r'\\bibliographystyle\s*\{([^}]+)\}')
+
+
+def support_file_names(text):
+    """
+    Return (class_file, other_files): the .cls named by \\documentclass, and
+    the .sty/.bst files named by live \\usepackage/\\RequirePackage and
+    \\bibliographystyle commands, in order of appearance. Commented-out
+    commands are ignored, so a \\bibliographystyle commented out by
+    inline_bbl doesn't pull in its .bst.
+    """
+    live = _COMMENT_RE.sub('', text)
+    m = _DOCUMENTCLASS_RE.search(live)
+    class_file = m.group(1).strip() + '.cls' if m else None
+    others = []
+    for m in _USEPACKAGE_RE.finditer(live):
+        others += [p.strip() + '.sty' for p in m.group(1).split(',') if p.strip()]
+    for m in _LIVE_BIBSTYLE_RE.finditer(live):
+        others.append(m.group(1).strip() + '.bst')
+    return class_file, list(dict.fromkeys(others))
+
+
+def copy_support_files(text, src_dir, outdir, search_dirs=SUPPORT_SEARCH_DIRS):
+    """
+    Copy each local file main.tex loads (support_file_names) into outdir,
+    taking the first hit from src_dir, then search_dirs. Files found in
+    none of them are assumed to be part of the TeX installation.
+
+    Returns (copied, class_missing): copied is [(name, source_path), ...];
+    class_missing is the .cls name if the class wasn't found locally (it may
+    still be installed -- the test compile will tell), else None.
+    """
+    class_file, others = support_file_names(text)
+    copied = []
+    class_missing = None
+    for name in ([class_file] if class_file else []) + others:
+        src = next((d / name for d in [src_dir, *search_dirs]
+                    if (d / name).is_file()), None)
+        if src is None:
+            if name == class_file:
+                class_missing = name
+            continue
+        dest = outdir / name
+        if not (dest.exists() and dest.resolve() == src.resolve()):
+            shutil.copy2(src, dest)
+        copied.append((name, src))
+    return copied, class_missing
+
+
+_UNDEF_REF_RE = re.compile(r"Reference [`']([^']+)' on page \S+ undefined")
+_UNDEF_CITE_RE = re.compile(r"Citation [`']([^']+)' on page \S+ undefined")
+_RERUN_RE = re.compile(r'Rerun to get|Label\(s\) may have changed')
+_OVERFULL_RE = re.compile(r'^Overfull \\hbox', re.MULTILINE)
+_PAGES_RE = re.compile(r'Output written on \S+ \((\d+) pages?')
+_TEX_ERROR_RE = re.compile(r'^!.*(?:\n.*){0,2}', re.MULTILINE)
+
+
+def summarize_log(log_text):
+    """Pull the submission-relevant facts out of a pdflatex .log."""
+    m = _PAGES_RE.search(log_text)
+    return {
+        'pages': int(m.group(1)) if m else None,
+        'undefined_refs': list(dict.fromkeys(_UNDEF_REF_RE.findall(log_text))),
+        'undefined_cites': list(dict.fromkeys(_UNDEF_CITE_RE.findall(log_text))),
+        'rerun': bool(_RERUN_RE.search(log_text)),
+        'overfull': len(_OVERFULL_RE.findall(log_text)),
+        'errors': _TEX_ERROR_RE.findall(log_text),
+    }
+
+
+MAX_PASSES = 4
+
+
+def compile_main(out_tex):
+    """
+    Run pdflatex on out_tex in its own directory, with TEXINPUTS unset so
+    only files in the output directory (plus the TeX installation) are
+    found -- the same situation as the publisher's flat folder.
+
+    At least two passes (the SI label block resolves on the second, spec
+    §4.5), then more while LaTeX asks for a rerun, up to MAX_PASSES. A third
+    pass is normal: citations print as '?' on the first pass, so filling
+    them in on the second moves floats and changes label page numbers.
+
+    Returns (ok, summary, n_passes): ok is False if pdflatex failed;
+    summary is summarize_log() of the final pass, or None if no log was
+    written.
+    """
+    env = os.environ.copy()
+    env.pop('TEXINPUTS', None)
+    env['max_print_line'] = '10000'  # unwrapped log lines, for the regexes
+    cmd = ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', out_tex.name]
+    log = out_tex.with_suffix('.log')
+    ok = True
+    summary = None
+    n_passes = 0
+    while n_passes < MAX_PASSES:
+        try:
+            result = subprocess.run(cmd, cwd=out_tex.parent, env=env,
+                                    capture_output=True)
+        except FileNotFoundError:
+            sys.exit('pdflatex not found on PATH; rerun with --no-compile.')
+        n_passes += 1
+        summary = (summarize_log(log.read_text(encoding='utf-8', errors='replace'))
+                   if log.exists() else None)
+        if result.returncode != 0:
+            ok = False
+            break
+        if n_passes >= 2 and not (summary and summary['rerun']):
+            break
+    return ok, summary, n_passes
+
+
+def prune_intermediates(outdir, keep_log):
+    """Delete build intermediates from outdir: make_single_figure.sh's
+    main_figures.* and pdflatex's main.aux/.out (and main.log unless
+    keep_log). Only these known names are touched. Returns the names
+    removed."""
+    names = [f'main_figures.{ext}' for ext in ('tex', 'pdf', 'log', 'aux')]
+    names += ['main.aux', 'main.out'] + ([] if keep_log else ['main.log'])
+    removed = []
+    for name in names:
+        p = outdir / name
+        if p.is_file():
+            p.unlink()
+            removed.append(name)
+    return removed
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
-                  make_figures=True, inline_bib=True, no_si=False):
+                  make_figures=True, inline_bib=True, no_si=False,
+                  compile_pdf=True, keep_intermediates=False):
     """
     Write a main-text-only manuscript derived from combined_tex into outdir.
 
@@ -476,6 +631,9 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     no_si        : the manuscript has no SI -- skip boundary detection and
                    SI stripping, but still do the submission packaging
                    (figure extraction, .bbl inlining, path rebasing)
+    compile_pdf  : if True, test-compile main.tex in outdir (compile_main)
+                   and exit with status 1 if that fails
+    keep_intermediates : if True, skip prune_intermediates
 
     Returns the path to the written main.tex.
     """
@@ -568,10 +726,63 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
             print(f'Generated fig1.pdf ... fig{n_figs}.pdf '
                   f'({n_rewritten} figure environment(s) rewritten)')
 
+    final_text = out_tex.read_text(encoding='utf-8')
+    copied, class_missing = copy_support_files(final_text, combined_tex.parent, outdir)
+    for name, src in copied:
+        print(f'Copied {name} (from {src.parent.resolve()})')
+    if class_missing:
+        print(f'Note: {class_missing} not found next to the input or in '
+              f'{SCRIPT_DIR.parent}/ams|agu; assuming it is installed.')
+
+    compile_failed = False
+    clean = True
+    if compile_pdf:
+        ok, summary, n_passes = compile_main(out_tex)
+        if not ok:
+            compile_failed, clean = True, False
+            print(f'ERROR: test compile of {out_tex} failed on pdflatex pass '
+                  f'{n_passes} (TEXINPUTS unset):', file=sys.stderr)
+            for err in (summary or {}).get('errors', [])[:3]:
+                print('  ' + err.replace('\n', '\n  '), file=sys.stderr)
+            print(f'  Full log: {out_tex.with_suffix(".log")}', file=sys.stderr)
+        elif summary is None:
+            print('Warning: pdflatex succeeded but wrote no main.log; '
+                  'compile not checked.', file=sys.stderr)
+        else:
+            problems = []
+            if summary['undefined_refs']:
+                problems.append('undefined reference(s): '
+                                + ', '.join(summary['undefined_refs']))
+            if summary['undefined_cites']:
+                cite_note = (' (\\bibliography{} is live -- run bibtex)'
+                             if _BIBLIOGRAPHY_RE.search(final_text) else '')
+                problems.append('undefined citation(s): '
+                                + ', '.join(summary['undefined_cites']) + cite_note)
+            if summary['rerun']:
+                problems.append(f'LaTeX still asks for a rerun after {n_passes} passes')
+            clean = not problems
+            print(f'Compiled main.pdf ({summary["pages"]} pages, {n_passes} passes, '
+                  'TEXINPUTS unset): '
+                  f'{len(summary["undefined_refs"])} undefined ref(s), '
+                  f'{len(summary["undefined_cites"])} undefined citation(s), '
+                  f'{summary["overfull"]} overfull \\hbox(es)')
+            for p in problems:
+                print(f'Warning: {p}', file=sys.stderr)
+            if not clean:
+                print(f'  main.log kept: {out_tex.with_suffix(".log")}', file=sys.stderr)
+
+    if not keep_intermediates:
+        removed = prune_intermediates(outdir, keep_log=not clean)
+        if removed:
+            print(f'Removed intermediates: {" ".join(removed)}')
+
     # Never-overwrite-input invariant.
     if hashlib.sha256(combined_tex.read_bytes()).hexdigest() != input_hash:
         sys.exit(f'ERROR: input file {combined_tex} was modified during '
                  'extraction. This should never happen.')
+
+    if compile_failed:
+        sys.exit(1)
 
     return out_tex
 
@@ -593,12 +804,18 @@ def main():
     parser.add_argument('--no-si', action='store_true',
                          help='Manuscript has no SI: skip boundary detection '
                               'and SI stripping, do the rest of the packaging')
+    parser.add_argument('--no-compile', action='store_true',
+                         help='Skip the test compile of main.tex')
+    parser.add_argument('--keep-intermediates', action='store_true',
+                         help='Keep main_figures.* and main.aux/.out/.log')
     args = parser.parse_args()
 
     extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,
                   make_figures=not args.no_figures,
                   inline_bib=not args.no_bib,
-                  no_si=args.no_si)
+                  no_si=args.no_si,
+                  compile_pdf=not args.no_compile,
+                  keep_intermediates=args.keep_intermediates)
 
 
 if __name__ == '__main__':

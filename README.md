@@ -1,7 +1,64 @@
 # tex-utility
 
-Tools for converting Beamer slide decks to journal manuscript drafts,
-and for splitting compiled PDFs into main text and SI files.
+Tools for turning a Beamer outline deck into an AMS or AGU manuscript draft,
+packaging that draft for submission (main-text `.tex` + per-figure PDFs +
+separate SI PDF), and maintaining the shared bibliography in `~/tex/bib`
+(AMS-abbreviated copy, missing DOIs).
+
+---
+
+## Quick reference
+
+For when it's been a few months. Paths assume the repo is at
+`~/claude/tex-utility`; run from the directory holding your deck.
+
+```bash
+U=~/claude/tex-utility
+J=agu            # or ams
+
+# 1. Convert the deck. Name the output explicitly -- the default is
+#    slides_agu.tex / slides_manuscript.tex, and the stem you pick here
+#    names everything downstream (<stem>.pdf, <stem>_SUBMIT/, ...).
+python $U/scripts/convert.py --format $J slides.tex main-and-si.tex
+#    AGU only: --journal "Geophysical Research Letters"  (default: JGR: Atmospheres)
+
+# 2. Compile (class files live in $U/agu or $U/ams)
+TEXINPUTS=$U/$J/: pdflatex main-and-si
+bibtex main-and-si
+TEXINPUTS=$U/$J/: pdflatex main-and-si
+TEXINPUTS=$U/$J/: pdflatex main-and-si
+
+# 3. SI PDF: open main-and-si.pdf, note the page where the SI starts (e.g. 18)
+python $U/scripts/split_pdf.py main-and-si.pdf 18
+#    -> main-and-si-main.pdf (discard), main-and-si-SI.pdf (upload)
+
+# 4. Main-text package (never modifies main-and-si.tex). Also copies the
+#    class file in, test-compiles main.pdf with TEXINPUTS unset, and deletes
+#    the build leftovers. Read its last lines: "0 undefined ref(s),
+#    0 undefined citation(s)" means the folder is ready.
+python $U/scripts/extract_main.py main-and-si.tex
+#    -> main-and-si_SUBMIT/main.tex, fig1.pdf, ..., <class>.cls, main.pdf
+#    no SI in the deck? add --no-si
+```
+
+Upload from `main-and-si_SUBMIT/`: `main.tex`, `fig*.pdf`, the `.cls`
+(`main.pdf` is for your own check). Upload `main-and-si-SI.pdf` separately.
+
+Reminders:
+
+- **Starting a new deck?** Copy `examples/starter-slides.tex` — it already has
+  the front-matter sections, end-matter sentinels, and `%% EMAIL:` line the
+  converters look for. Its Appendix and `\section{Supplemental}` blocks are
+  commented out: uncomment the SI section if the paper has one, otherwise
+  step 4 needs `--no-si`. For AMS, change its `\bibliographystyle{plainnat}`
+  to `ametsocV6` (see *Bibliography*).
+- **After converting**, work through the checklist in *After conversion*
+  (key points, PLS, email, word count, ...).
+- **Bibliography upkeep** lives in `~/tex/bib`: `make` regenerates
+  `all_ams.bib`; `make doi-candidates` / `make doi-apply` add missing DOIs.
+  See *Bibliography tools*.
+- **Changed a script?** Run `python tests/run_tests.py` and update the
+  matching `specs/*.md`.
 
 ---
 
@@ -10,44 +67,52 @@ and for splitting compiled PDFs into main text and SI files.
 ```
 slides.tex   (Beamer deck)
     |
-    |  convert.py --format ams|agu
+    |  convert.py --format ams|agu slides.tex main-and-si.tex
     v
 main-and-si.tex   (main text + SI in one file; %% SI_BEGIN marks the boundary)
     |
     |  pdflatex (x2-3) + bibtex
     v
-main-and-si.pdf + main-and-si.aux
+main-and-si.pdf + main-and-si.aux + main-and-si.bbl
     |
-    +--> split_pdf.py SPLIT_PAGE  -->  paper-SI.pdf
+    +--> split_pdf.py main-and-si.pdf SPLIT_PAGE  -->  main-and-si-SI.pdf
     |
-    +--> extract_main.py          -->  main.tex, fig1.pdf, fig2.pdf, ...
-              |                         (SI \ref{} hardcoded to S1, S2, ...;
-              |  pdflatex (x2-3)         \includegraphics{figN.pdf}, bare
-              v                          filename, same directory)
-         main.pdf
+    +--> extract_main.py main-and-si.tex  -->  main-and-si_SUBMIT/
+                                                 main.tex, fig1.pdf, ..., <class>.cls,
+                                                 main.pdf (test compile)
+                                                 (SI \ref{}s resolve via an
+                                                  appended \label{} block;
+                                                  bibliography inlined;
+                                                  \includegraphics{figN.pdf})
 ```
 
 1. **Convert** (`convert.py` / `beamer_to_ams.py` / `beamer_to_agu.py`) —
-   Beamer slides → `main-and-si.tex`, a single manuscript with main text and
-   SI together so cross-references resolve naturally. See *Beamer →
-   manuscript* below.
+   Beamer slides → a single manuscript with main text and SI together so
+   cross-references resolve naturally. The default output name is
+   `<deck>_agu.tex` / `<deck>_manuscript.tex`; this README calls it
+   `main-and-si.tex` (pass that as the second argument to get the same
+   name). See *Beamer → manuscript* below.
 2. **Compile** `main-and-si.tex` (`pdflatex`/`bibtex`) to produce
-   `main-and-si.pdf` and `main-and-si.aux` — both feed the next two steps.
+   `main-and-si.pdf`, `.aux`, and `.bbl` — all feed the next two steps.
    See *Compiling the output*.
 3. **Split the SI PDF** (`split_pdf.py`) — cut the compiled
-   `main-and-si.pdf` at the page where the SI begins, producing `paper-SI.pdf`
-   for separate upload. See *Splitting a PDF*.
+   `main-and-si.pdf` at the page where the SI begins, producing
+   `main-and-si-SI.pdf` for separate upload. See *Splitting a PDF*.
 4. **Extract the main-text file** (`extract_main.py`) — cut
-   `main-and-si.tex` at `%% SI_BEGIN`, hardcode SI cross-references
-   (`\ref{}` → `S1`, …) using `main-and-si.aux`, and extract each figure to
-   its own `figN.pdf` (`make_single_figure.sh`) with bare-filename
-   `\includegraphics{figN.pdf}` so the result compiles in a flat submission
-   folder. See *Extracting the main-text-only file*.
+   `main-and-si.tex` at `%% SI_BEGIN`; leave SI cross-references as
+   `\ref{}` but append invisible `\label{}` reconstructions (numbers `S1`,
+   `S2`, … read from `main-and-si.aux`) so they still resolve; inline the
+   `.bbl`; and extract each figure to its own `figN.pdf`
+   (`make_single_figure.sh`) with bare-filename `\includegraphics{figN.pdf}`
+   so the result compiles in a flat submission folder. It then copies the
+   journal class into the folder, test-compiles `main.pdf` there with
+   `TEXINPUTS` unset, and deletes the build leftovers. See *Extracting the
+   main-text-only file*.
 
-Steps 3 and 4 both consume the **compiled** `main-and-si.pdf`/`.aux` from
-step 2 and can run in either order. Together they produce the
-submission/revision package: `main.tex` + `figN.pdf` (+ `main.pdf`) for the
-main text, and `paper-SI.pdf` for the SI.
+Steps 3 and 4 both consume the **compiled** outputs of step 2 and can run in
+either order. Together they produce the submission/revision package:
+`main.tex` + `figN.pdf` + the `.cls` for the main text, and
+`main-and-si-SI.pdf` for the SI.
 
 ---
 
@@ -92,6 +157,11 @@ python scripts/convert.py --format agu slides.tex --journal "Geophysical Researc
 python scripts/convert.py --format ams slides.tex draft_v1.tex
 ```
 
+`--journal` is **AGU only** (sets `\journalname{}`, overriding a
+`%\journalname{...}` directive in the deck; default `JGR: Atmospheres`).
+AMS has no equivalent: the per-journal macro was removed from the AMS class
+in 2020, so the AMS output is the same whichever AMS journal you target.
+
 The individual converter scripts can also be run directly and behave identically:
 
 ```bash
@@ -100,6 +170,10 @@ python scripts/beamer_to_agu.py slides.tex
 ```
 
 ### Compiling the output
+
+`./ams/` and `./agu/` below are relative to this repo; from anywhere else use
+the absolute path (e.g. `TEXINPUTS=~/claude/tex-utility/agu/:`), as in
+*Quick reference*.
 
 ```bash
 # AMS
@@ -125,6 +199,7 @@ python scripts/split_pdf.py paper.pdf SPLIT_PAGE
 
 ```bash
 # Split paper.pdf: pages 1–17 → paper-main.pdf, pages 18–end → paper-SI.pdf
+# (defaults are always <input-stem>-main.pdf / <input-stem>-SI.pdf)
 python scripts/split_pdf.py paper.pdf 18
 
 # Custom output names
@@ -186,6 +261,21 @@ main-only manuscript, **without ever writing to the input file**:
   `\bibliography{}`, and `\bibliography{}`/`\bibliographystyle{}` are
   commented out — so `main.tex` compiles with `pdflatex` alone, with no
   `bibtex` run and no `.bib` database needed on the publisher's machine.
+- Local `.cls`/`.sty` files that `main.tex` loads are copied into the output
+  folder — taken from next to the combined `.tex` if there (your paper's own
+  class copy wins), otherwise from this repo's `ams/`/`agu/`. Anything found
+  in neither place is assumed to be part of the TeX installation.
+- `main.tex` is then test-compiled in the output folder with **`TEXINPUTS`
+  unset**, so only what's in the folder (plus the TeX installation) is
+  visible — the publisher's situation. It runs `pdflatex` 2–4 times, until
+  LaTeX stops asking for a rerun (3 is typical with citations), and reports
+  pages, undefined references/citations, and overfull boxes. A failed
+  compile prints the LaTeX error and exits 1. A package that compiled
+  for you only because it is on your `TEXINPUTS` will fail here: put a copy
+  next to the combined `.tex` and rerun.
+- Build leftovers are deleted: `main_figures.*` (figure harness) and
+  `main.aux`/`.out`/`.log`. `main.log` is kept if the compile failed or
+  reported problems. `main.pdf` is kept for checking — don't upload it.
 
 ```bash
 # 1. Compile the combined main+SI document first -- extract_main.py reads
@@ -196,18 +286,61 @@ bibtex main-and-si
 TEXINPUTS=./agu/: pdflatex main-and-si.tex
 TEXINPUTS=./agu/: pdflatex main-and-si.tex
 
-# 2. Extract the main-text-only manuscript
+# 2. Extract the main-text-only manuscript (and test-compile it)
 python scripts/extract_main.py main-and-si.tex
-# → main-and-si_SUBMIT/main.tex, fig1.pdf, fig2.pdf, ...
+# → main-and-si_SUBMIT/main.tex, fig1.pdf, fig2.pdf, ..., agujournal2019.cls, main.pdf
 ```
 
 By default the `.aux`/`.bbl` are `<stem>.aux`/`<stem>.bbl` next to the input,
 and output goes to `<stem>_SUBMIT/`. Pass `--no-figures` to skip figure
-extraction (SI strip + ref flattening only), `--no-bib` to skip `.bbl`
+extraction (SI strip + SI-reference handling only), `--no-bib` to skip `.bbl`
 inlining (leaves `\bibliography{}` live), `--no-si` for a manuscript that
 has no SI (skips boundary detection/stripping, still does the rest of the
-packaging), or give an explicit `.aux`/`--bbl` path / `--outdir DIR` to
-override the defaults.
+packaging), `--no-compile` to skip the test compile, `--keep-intermediates`
+to keep the build leftovers, or give an explicit `.aux`/`--bbl` path /
+`--outdir DIR` to override the defaults.
+
+Rerunning into an existing output folder overwrites what it regenerates but
+doesn't delete anything else. If you dropped a figure since the last run,
+delete the stale `figN.pdf` yourself, or start from an empty folder.
+
+### Bibliography tools
+
+These maintain the shared bibliography in `~/tex/bib`, not a single paper.
+`all.bib` there is the master, with **full** journal names (what AGU wants);
+`all_ams.bib` is generated from it with AMS abbreviations. Normally you drive
+both scripts through that directory's `Makefile`:
+
+```bash
+cd ~/tex/bib
+make                  # regenerate all_ams.bib from all.bib + journals.csv
+make doi-candidates   # query Crossref for @article entries lacking a doi
+                      #   -> doi/doi_accept.tsv, doi/doi_review.tsv (all.bib untouched)
+# review: delete wrong rows from doi_accept.tsv; paste good rows from doi_review.tsv
+make doi-apply        # insert DOIs from doi/doi_accept.tsv (dated backup of all.bib first)
+```
+
+Direct use:
+
+```bash
+# AMS copy. journals.csv has columns full,ams and must list EVERY journal in
+# the master (unabbreviated names map to themselves); missing names are
+# reported on stderr, and --strict makes them an error (no output written).
+python scripts/bib_for_ams.py all.bib journals.csv -o all_ams.bib [--strict]
+
+# Missing DOIs. --mailto is required (Crossref "polite pool").
+python scripts/bib_add_doi.py find  all.bib --outdir doi/ --mailto you@example.com
+python scripts/bib_add_doi.py apply all.bib doi/doi_accept.tsv
+```
+
+`find` accepts a match only when title similarity ≥ 0.95, year is within ±1,
+and the first-author surname matches; everything else goes to the review
+file. Crossref responses are cached in `doi/crossref_cache.jsonl`, so a rerun
+only queries new entries. `apply` skips entries that already have a DOI,
+unknown keys, and DOIs already used by another entry. Requires `requests`.
+
+After adding an entry to `all.bib` with a journal not yet in `journals.csv`,
+add a row there before running `make`, or the AMS copy keeps the full name.
 
 ---
 
@@ -260,7 +393,10 @@ override the defaults.
   significance statement, max 120 words — trim, then uncomment)
 - `natbib` / `\citep` / `\citet` — kept as-is
 - `\bibliographystyle{...}` and `\bibliography{...}` extracted from source and
-  injected into the postamble (works regardless of whether they appear inside or outside a frame)
+  injected into the postamble (works regardless of whether they appear inside or outside a frame).
+  The style is passed through **verbatim** — a deck using `plainnat` (as
+  `examples/starter-slides.tex` does) gives AMS output with `plainnat`, not
+  `ametsocV6`
 - `\section{Supplemental…}` is reordered: bibliography + `\clearpage` are injected
   before it so references always precede SI content (mirrors AGU behavior).
   A manual "Supplemental material for:" title page (title/authors/affiliations/
@@ -315,10 +451,12 @@ Things to fill in before sending to coauthors:
   appended to it) and `\datastatement`; otherwise fill in their stub placeholders
 - Significance statement (optional): trim the commented `%\statement` block after
   `\maketitle` to 120 words and uncomment it, or delete it
-- Uncomment `\journal{jcli}` (or the relevant code) if submitting via the full AMS package
+- Check `\bibliographystyle{}` is `ametsocV6` — the deck's style is copied
+  verbatim, so a `plainnat` deck needs fixing here (or in the deck)
 - Run `texcount <output>_manuscript.tex` to get a word count; `%TC:ignore` markers are
-  already in place to exclude title/authors/affiliation/abstract, captions, endmatter,
-  and SI per AMS's word-limit rule
+  already in place to exclude title/authors/affiliation/abstract, captions,
+  references, and SI per AMS's word-limit rule. Acknowledgments, the data
+  statement, and appendixes are **counted**, as AMS's limit requires
 
 **AGU:**
 - Journal name in `\journalname{}` — default is `JGR: Atmospheres`
@@ -347,18 +485,22 @@ all of them already in place is at `examples/starter-slides.tex`.
 
 ### Metadata
 
-Use `\inst{N}` markers on every author — without them the script assigns
-sequential affiliations and may not match your intended grouping:
+Use `\inst{N}` markers on every author — without them every author gets the
+whole `\institute{}` text as a single shared affiliation:
 
 ```latex
-\author[]{Jane Smith\inst{1} and John Doe\inst{1,2}}
+\author[]{Jane Smith\inst{1} and John Doe\inst{2}}
 \institute[]{%
   \inst{1} Department of Geosciences, University A, City, State \and
   \inst{2} Institute B, City, State}
 ```
 
-Multi-affiliation authors (`\inst{1,2}`) are not yet parsed; for now list
-the primary affiliation only and edit the output by hand.
+**Give each author exactly one `\inst{N}`.** Multi-affiliation markers
+(`\inst{1,2}`) are not supported, and they do more than lose the second
+affiliation: the comma is read as an author separator, so
+`John Doe\inst{1,2}` becomes two garbled "authors" (`John Doe\inst{1` and
+`2}`). List the primary affiliation in the deck and add the second one to
+the converted manuscript by hand.
 
 ### Abstract frame
 
@@ -525,6 +667,13 @@ raw source text, so their location doesn't matter.
 \end{frame}
 ```
 
+The AGU converter drops the style (the class loads `apacite`), but the AMS
+converter copies it verbatim — so if you will convert to AMS, use
+`ametsocV6` in the deck (Beamer compiles fine with it; `ams/` must be on
+`TEXINPUTS`/`BSTINPUTS`) or fix the style in the output. For the AMS
+abbreviated journal names, point `\bibliography{}` at `all_ams` rather than
+`all` (see *Bibliography tools*).
+
 ### End-matter sentinels
 
 Both converters extract data availability, Conflict of Interest, and
@@ -573,7 +722,8 @@ to Beamer (no nav-bar entries, no `\section*` clutter).
 The following are removed silently — no action needed in the source:
 
 - `\usetheme`, `\usecolortheme`, `\setbeamercolor`, `\setbeamerfont`, etc.
-- `\pause`, `\only<>{}`, `\visible<>{}`, `\uncover<>{}`, `\onslide<>{}`
+- `\pause`; `\only<>{}`, `\visible<>{}`, `\uncover<>{}`, `\onslide<>{}`
+  (braced form only — see *Not handled* below)
 - `\alert{x}` → `x`; `\structure{x}` → `x`; `\textcolor{c}{x}` → `x`
 - `\columns`, `\column{...}`, `\begin{minipage}{...}` (content kept)
 - `\begin{block}{Title}` → `\textbf{Title}` (content kept)
@@ -583,6 +733,16 @@ The following are removed silently — no action needed in the source:
 - `\bibliographystyle{...}` and `\bibliography{...}` when inside a frame body
   (the values are extracted separately and injected into the postamble)
 - Comment lines (`% ...`); `\%` is preserved
+
+### Not handled
+
+These pass through into the manuscript as literal text — avoid them in the
+deck, or clean them up in the output:
+
+- Overlay specs on anything other than the braced commands above:
+  `\item<2->` leaves `<2->` in the prose, `\textbf<2>{x}` stays as is.
+- The bare switch form `\onslide<3->` (no braces) is left in place.
+- `\inst{1,2}` multi-affiliation markers (see *Metadata*).
 
 ---
 
@@ -598,23 +758,37 @@ tex-utility/
     extract_main.py         Split combined main+SI .tex into main-only manuscript
     split_pdf.py            PDF splitter (main text / SI)
     make_single_figure.sh   Extract each figure into its own figN.pdf
-  specs/
-    beamer_to_ams_spec.md   AMS converter behavioral spec
-    beamer_to_agu_spec.md   AGU converter behavioral spec
-    extract_main_spec.md    extract_main.py behavioral spec
+    bib_for_ams.py          Generate AMS-abbreviated copy of a .bib
+    bib_add_doi.py          Find (Crossref) and insert missing DOIs
+  specs/                    Behavioral specs -- update alongside the script
+    beamer_to_ams_spec.md
+    beamer_to_agu_spec.md
+    extract_main_spec.md
+    bib_for_ams_spec.md
+    bib_add_doi_spec.md
   tests/
-    run_tests.py            Regression test suite
+    run_tests.py            Regression suite: python tests/run_tests.py
     test_input.tex          Test Beamer source
     test_main_si.tex        Test combined main+SI source (extract_main.py)
     test_main_si.aux        Matching .aux fixture (extract_main.py)
-  examples/                 Example Beamer sources and converted outputs
+    test_main_si.bbl        Matching .bbl fixture (extract_main.py)
+  examples/
     starter-slides.tex      Barebones deck pre-tagged with all conversion hooks
+                            (start new decks from this)
+    slides-v2.tex, slides-v3.tex          Real decks used during development
+    slides-v2_agu.tex                     ... and converted output
+    enso-global-temperature-slides-v5.tex Real deck, with converted output
+      (_agu.tex, _manuscript.tex)
   ams/
-    ametsocV6.1.cls
-    ametsocV6.bst
+    ametsocV6.1.cls, ametsocV6.bst
+    AMS LaTeX Package V6.1/ Full publisher package (untracked; docs, template)
   agu/
-    agujournal2019.cls
-    agutexSI2019.cls
-    agujournaltemplate.tex
-    si_template_2019.tex
+    agujournal2019.cls, agutexSI2019.cls, trackchanges.sty
+    agujournaltemplate.tex  Publisher main-text template
+    si_template_2019.tex    Publisher SI template
+    Sep-2025-agujournal2019 template/  Full publisher package (untracked)
 ```
+
+LaTeX build products (`.aux`, `.log`, `.pdf`, …) in `examples/` and `agu/`
+are gitignored, as is a duplicate `agujournal2019.cls` at the repo root
+(identical to `agu/`'s copy).

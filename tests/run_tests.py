@@ -11,7 +11,9 @@ Usage:
 """
 
 import hashlib
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,7 +58,7 @@ def run_extract_main(outdir):
     result = subprocess.run(
         [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'),
          str(EXTRACT_INPUT), str(EXTRACT_AUX),
-         '--outdir', str(outdir), '--no-figures'],
+         '--outdir', str(outdir), '--no-figures', '--no-compile'],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -607,7 +609,8 @@ def check_no_si_paths():
         subdir = Path(tmpdir) / 'SUBMIT'
         result = subprocess.run(
             [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'), str(out),
-             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si'],
+             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si',
+             '--no-compile'],
             capture_output=True, text=True)
         if result.returncode != 0:
             _failures.append(f'  FAIL  extract_main --no-si exited '
@@ -744,7 +747,8 @@ def check_appendix_paths():
         subdir = Path(tmpdir) / 'SUBMIT'
         result = subprocess.run(
             [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'), str(agu_out),
-             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si'],
+             '--outdir', str(subdir), '--no-figures', '--no-bib', '--no-si',
+             '--no-compile'],
             capture_output=True, text=True)
         if result.returncode != 0:
             _failures.append(f'  FAIL  extract_main --no-si (appendix) exited '
@@ -756,6 +760,82 @@ def check_appendix_paths():
             return
         check('extract_main retains appendix', main_tex.read_text(),
               r'Single unlettered appendix content')
+
+
+_PACKAGE_COMBINED = r"""\documentclass{localclass}
+\usepackage{localpkg}
+% \usepackage{ghostpkg}
+\begin{document}
+Main text cites \cite{k1} and refers to Figure~\ref{fig:si1}.
+\bibliographystyle{plain}
+\bibliography{refs}
+\clearpage
+%% SI_BEGIN
+\section*{Supporting Information}
+\begin{figure}\caption{SI figure.}\label{fig:si1}\end{figure}
+\end{document}
+"""
+
+
+def _run_package(src, outdir, env=None):
+    return subprocess.run(
+        [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'),
+         str(src / 'combined.tex'), '--outdir', str(outdir), '--no-figures'],
+        capture_output=True, text=True, env=env)
+
+
+def check_compile_and_package():
+    """Default packaging: local .cls/.sty copied into the output dir
+    (commented \\usepackage ignored), main.tex test-compiled with TEXINPUTS
+    unset, intermediates pruned; a compile failure exits 1 and keeps
+    main.log."""
+    if not shutil.which('pdflatex'):
+        print('  (skipped: pdflatex not on PATH)')
+        return
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src = Path(tmpdir) / 'src'
+        src.mkdir()
+        (src / 'combined.tex').write_text(_PACKAGE_COMBINED)
+        (src / 'combined.aux').write_text('\\newlabel{fig:si1}{{S1}{3}}\n')
+        (src / 'combined.bbl').write_text(
+            '\\begin{thebibliography}{1}\n\\bibitem{k1} A. Author, 2000.\n'
+            '\\end{thebibliography}\n')
+        (src / 'localclass.cls').write_text('\\LoadClass{article}\n')
+        (src / 'localpkg.sty').write_text('\\ProvidesPackage{localpkg}\n')
+        (src / 'ghostpkg.sty').write_text('\\ProvidesPackage{ghostpkg}\n')
+
+        # --- success path ---
+        out = Path(tmpdir) / 'SUBMIT'
+        result = _run_package(src, out)
+        if result.returncode != 0:
+            _failures.append(f'  FAIL  package: exited {result.returncode}:\n'
+                             f'{result.stdout}\n{result.stderr}')
+            return
+        for name in ('localclass.cls', 'localpkg.sty', 'main.pdf', 'main.tex'):
+            if not (out / name).exists():
+                _failures.append(f'  FAIL  package: {name} missing from output')
+        for name in ('ghostpkg.sty', 'main.aux', 'main.log'):
+            if (out / name).exists():
+                _failures.append(f'  FAIL  package: {name} should not be in output')
+        check('package: clean compile reported', result.stdout,
+              r'Compiled main\.pdf \(\d+ pages, \d+ passes, TEXINPUTS unset\): '
+              r'0 undefined ref\(s\), 0 undefined citation\(s\)')
+
+        # --- TEXINPUTS is not passed through: a .sty reachable only via
+        #     TEXINPUTS must make the compile fail ---
+        elsewhere = Path(tmpdir) / 'elsewhere'
+        elsewhere.mkdir()
+        (src / 'localpkg.sty').rename(elsewhere / 'localpkg.sty')
+        env = dict(os.environ, TEXINPUTS=f'{elsewhere}:')
+        out2 = Path(tmpdir) / 'SUBMIT2'
+        result = _run_package(src, out2, env=env)
+        if result.returncode != 1:
+            _failures.append(f'  FAIL  package (TEXINPUTS-only .sty): expected '
+                             f'exit 1, got {result.returncode}')
+        check('package: compile failure reported', result.stderr,
+              r'test compile of .* failed')
+        if not (out2 / 'main.log').exists():
+            _failures.append('  FAIL  package: main.log not kept after failed compile')
 
 
 def check_rebase_paths_unit():
@@ -886,6 +966,7 @@ def main():
         ('single appendix + --no-si (e2e)', check_appendix_paths),
         ('text-only SI checklist (e2e)', check_text_only_si),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),
+        ('extract_main support files + test compile (e2e)', check_compile_and_package),
     ]
     for section, fn in unit_sections:
         print(f'\n=== {section} ===')

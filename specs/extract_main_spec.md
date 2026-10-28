@@ -30,6 +30,10 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
   `\bibliography{}`/`\bibliographystyle{}`, so `main.tex` compiles with
   `pdflatex` alone (no `bibtex`, no `.bib` database needed on the
   publisher's machine).
+- Copies the local `.cls`/`.sty`/`.bst` files `main.tex` loads into the
+  output directory, test-compiles `main.tex` there with `TEXINPUTS` unset,
+  summarizes the log, and deletes build intermediates (§4.9) — so the
+  output directory is the finished submission folder.
 
 ---
 
@@ -52,12 +56,17 @@ are never written.
 |------|----------|
 | `main.tex` | SI removed; `\ref`/`\eqref`/`\autoref`/`\cref`/`\Cref` to SI items unchanged (resolved via a reconstructed `\label{}` block before `\end{document}`); `\pageref{}` to SI items flattened to a literal page number; figure includes rewritten to `figN.pdf`; `.bbl` inlined as `thebibliography` with `\bibliography{}`/`\bibliographystyle{}` commented out |
 | `fig1.pdf`, `fig2.pdf`, ... | One PDF per live figure environment, cropped (via `make_single_figure.sh`) |
-| `main_figures*.tex/.pdf/.log` | `make_single_figure.sh` intermediates (not cleaned up) |
+| `<class>.cls`, `*.sty`, `*.bst` | Local support files `main.tex` loads, copied from next to the input or from the repo's `ams/`/`agu/` (§4.9.1) |
+| `main.pdf` | Result of the test compile (§4.9.2), kept for checking; not part of the submission |
+| `main.log` | Kept only when the test compile failed or was unclean |
+| `main_figures.*`, `main.aux`/`.out` | Deleted after the run (§4.9.3) unless `--keep-intermediates` |
 
 CLI summary lines report: how the SI boundary was found, how many SI refs were
 preserved via the reconstructed `\label{}` block, how many `\pageref{}`s were
-flattened, and how many figures were generated/rewritten. Warnings go to
-stderr.
+flattened, how many figures were generated/rewritten, which support files
+were copied, the test-compile result (pages, passes, undefined refs/
+citations, overfull `\hbox`es), and which intermediates were removed.
+Warnings go to stderr. Exit status is 1 if the test compile fails.
 
 ---
 
@@ -262,7 +271,66 @@ relative paths.
   anything (refuses to let `--outdir`/filename collide with the input).
 - SHA-256 of the input bytes is checked before and after the run; a mismatch
   aborts with an error (defense in depth — nothing in the algorithm should
-  ever write to the input, but this catches it if it ever does).
+  ever write to the input, but this catches it if it ever does). This check
+  runs before the compile-failure exit, so it is never skipped.
+
+### 4.9 Submission-folder finishing
+
+Runs after figure extraction, on the final `main.tex`.
+
+#### 4.9.1 Support files (`support_file_names` / `copy_support_files`)
+
+Comments are stripped (`(?<!\\)%.*`), then the names are collected:
+`\documentclass[...]{X}` → `X.cls`; each comma-separated name in
+`\usepackage`/`\RequirePackage[...]{a,b}` → `a.sty`, `b.sty`; live
+`\bibliographystyle{Y}` → `Y.bst`. After `.bbl` inlining the style command
+is commented out, so a `.bst` is only picked up with `--no-bib` or when there
+was no `.bbl`.
+
+Each name is looked up in order: the input's directory, then the repo's
+`ams/`, then `agu/` (`SUPPORT_SEARCH_DIRS`). The first hit is copied into
+`outdir` with `shutil.copy2`. Preferring the input's directory means a paper
+that carries its own (possibly older) class copy keeps it. Names found
+nowhere are assumed to be part of the TeX installation and are skipped
+silently, except the class, which prints a note (the test compile settles
+whether it really is installed).
+
+#### 4.9.2 Test compile (`compile_main` / `summarize_log`)
+
+Skipped with `--no-compile`. `pdflatex -interaction=nonstopmode
+-halt-on-error main.tex` runs in `outdir` with `TEXINPUTS` **removed** from
+the environment, so only `outdir` and the TeX installation are searched —
+the publisher's situation. A file the folder needs but lacks becomes a
+compile error here instead of at the publisher. (`max_print_line=10000` is
+set so log lines aren't wrapped before regex scanning.)
+
+Passes: at least 2, then more while the log says `Rerun to get` / `Label(s)
+may have changed`, up to `MAX_PASSES = 4`. A third pass is the normal case
+for a document with citations: pass 1 prints citations as `?`, pass 2 fills
+them in, which moves floats and changes label page numbers, which triggers
+"Label(s) may have changed" (seen on the 2026-10-28 real-paper run: 3
+passes).
+
+The final pass's log is summarized: page count, undefined references,
+undefined citations (with a note when `\bibliography{}` is still live, i.e.
+`--no-bib`), whether a rerun is still requested, and the count of `Overfull
+\hbox` lines. Undefined refs/citations or a pending rerun are warnings
+(exit 0) and mark the compile unclean; overfull boxes are reported only.
+
+A pdflatex failure prints the first three `!` error blocks from the log and
+the log path, skips deletion of `main.log`, and makes the script exit 1 after
+the input-hash check. `pdflatex` missing from `PATH` aborts with a message
+pointing at `--no-compile`.
+
+#### 4.9.3 Cleanup (`prune_intermediates`)
+
+Skipped with `--keep-intermediates`. Deletes only these known names, if
+present: `main_figures.tex/.pdf/.log/.aux` (`make_single_figure.sh`'s
+harness; its per-figure `main_figures_N.*` files it already removes itself),
+`main.aux`, `main.out`, and `main.log` unless the compile was unclean or
+failed. `main.pdf` is kept for checking. Files from earlier runs that this
+run didn't produce (e.g. a stale `fig11.pdf` after a figure was dropped) are
+not touched.
 
 ---
 
@@ -288,6 +356,14 @@ relative paths.
 | No live `\bibliography{}` in main text | Nothing inlined; warning emitted (`.bbl` contents discarded) |
 | `--no-bib` | `.bbl` inlining skipped entirely; `\bibliography{}`/`\bibliographystyle{}` left live |
 | Appendix content (added 2026-09-15) | Retained in `main.tex` by construction, no code change — both converters (`beamer_to_ams_spec.md` §4.10, `beamer_to_agu_spec.md` §4.11) always emit the appendix before `%% SI_BEGIN`, so `strip_si` (§4.2) keeps it. `find_si_start`'s three tiers (§4.1) cannot fire on appendix content: the sentinel is exact, the section-title tiers require `Supplement`/`Supporting Information` immediately after the brace, and the literal-`S` `\renewcommand\thefigure{S\arabic{figure}}` fallback can't match AMS's `A`-lettered reset. `flatten_refs` (§4.4) classifies SI labels by `ref.startswith('S')`, so an appendix ref resolving to `A1` is correctly left as a live `\ref{}`, not swept into the SI reconstruction block. `rewrite_figure_includes` (§4.7) maps the Nth live `\begin{figure}` in document order to `figN.pdf` and never reads `\thefigure`, so an appendix counter reset doesn't perturb it. Verified with a regression fixture, not just argued — see §6 |
+| Class not next to input nor in `ams/`/`agu/` | Note printed, nothing copied; test compile decides (works if installed system-wide) |
+| `.sty` reachable only via the user's `TEXINPUTS` | Not copied, and the test compile fails (exit 1) — intended: the publisher wouldn't have it either. Put the file next to the input to have it copied |
+| `\usepackage{...}` commented out | Ignored (comments stripped before scanning) |
+| Test compile fails | Error blocks + log path to stderr; `main.log` kept; other intermediates still pruned; exit 1 |
+| Undefined refs/citations or rerun still requested after the last pass | Warnings; `main.log` kept; exit 0 |
+| `--no-compile` | No `main.pdf`; support files still copied; figure intermediates still pruned |
+| `--keep-intermediates` | Nothing deleted |
+| Stale files in a reused `--outdir` | Left alone (only known intermediate names are deleted) |
 | Appendix figure file naming | `figN.pdf` (sequential, document order), not `figA1.pdf`-style. Recorded limitation, not fixed — journals often want the latter; would require teaching `rewrite_figure_includes` and `make_single_figure.sh` about counter resets, a real change to the positional figure-mapping contract |
 
 ---
@@ -307,3 +383,4 @@ relative paths.
 | 2026-08-22 | `make_single_figure.sh`'s `for ii in $(seq -w 1 $NFIGS)` zero-pads output filenames to equal width once `NFIGS >= 10` (`fig01.pdf`…`fig10.pdf`), while `rewrite_figure_includes` in this script builds unpadded `figN.pdf` references — for any 10+-figure manuscript, `fig1.pdf`…`fig9.pdf` are referenced but don't exist on disk, and the final `pdflatex main.tex` compile fails on the first missing include (ultrareview finding on commit b3863d0; silent from this script's side, since `make_single_figure.sh` exits 0 — only surfaces at the submission-folder compile step, past this script's own test coverage). Fixed by dropping `-w` from the `seq` call so filenames are never padded, matching `rewrite_figure_includes`'s `str(n)` | Yes |
 | 2026-09-15 | No code change (appendix support landed in both converters, see `beamer_to_ams_spec.md` §4.10 / `beamer_to_agu_spec.md` §4.11) — this script needed none, by construction (§5). Verified rather than assumed: appendix content added to `tests/test_main_si.tex` (before `%% SI_BEGIN`) with an `A1`-ref `\newlabel` in `tests/test_main_si.aux`; `check_extract_main` extended to assert the appendix figure/command/title survive in `main.tex` and its `A1` ref is left as a live `\ref{}` rather than swept into the SI label-reconstruction block | Yes |
 | 2026-10-28 | All 7 SI `\ref`s in a real AMS revision (`hdd-slides-r1_manuscript.tex`) stayed undefined in `main.tex` after two `pdflatex` passes, although the SI label block was present. The converters emit `\clearpage` *before* `%% SI_BEGIN`, so it survived truncation and put the label block on an empty page that LaTeX never outputs; its `\label` writes never reached `main.aux`. Fixed in `strip_si` by dropping trailing `\clearpage`/`\cleardoublepage`/`\newpage` (§4.2). Also, `tests/test_main_si.tex` had the `\clearpage` *after* the sentinel, unlike real converter output, so the bug never showed in tests. The fixture now puts it before the sentinel, and `check_extract_main` asserts that no `\clearpage` comes before the label block; the check was confirmed to fail on the old code. Re-verified on the real paper: 0 undefined references | Yes |
+| 2026-10-28 | Folded the manual post-extraction steps into the script (§4.9): copy local `.cls`/`.sty`/`.bst` from the input dir or `ams/`/`agu/`; test-compile `main.tex` in `outdir` with `TEXINPUTS` unset (2–4 passes, until no rerun request), summarizing undefined refs/citations and overfull boxes, exit 1 on failure; prune `main_figures.*`/`main.aux`/`.out`/`.log`. New flags `--no-compile`, `--keep-intermediates`. Real paper (`hdd-slides-r1_manuscript.tex`): class copied, 37 pages in 3 passes, 0 undefined refs/citations, folder left with `main.tex`, `fig1–10.pdf`, `ametsocV6.1.cls`, `main.pdf`. New e2e test `check_compile_and_package` (support-file copy, commented `\usepackage` ignored, pruning, TEXINPUTS-only `.sty` → exit 1 with `main.log` kept); it caught a bug during development where a failed compile exited 0. Existing extract_main tests now pass `--no-compile` | Yes |

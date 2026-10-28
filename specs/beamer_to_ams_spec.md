@@ -503,6 +503,7 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | Appendix figure files from `extract_main.py`/`make_single_figure.sh` | Named sequentially (`figN.pdf`, document order), not `figA1.pdf`-style. Recorded limitation, not fixed — see §4.10 |
 | AMS's published word limit (body, acknowledgments, appendixes counted; title page, abstract, references, captions, tables, figures excluded) | The endmatter block is no longer `%TC:ignore`-wrapped (fixed 2026-09-15, previously under-counted); appendix content is never wrapped either — see §3 |
 | `\label{}` on the appendix marker section (or a later `\section{}` opening a subsequent appendix) | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.10. Workaround: attach the label to a `\subsection{}` inside the appendix instead |
+| Multi-affiliation `\inst{1,2}` | **Open item (found 2026-10-28).** Garbles the author list: `_AUTHOR_SEP_RE` (shared, `beamer_common.py`) splits on the comma inside the braces, so `John Doe\inst{1,2}` becomes two authors, `John Doe\inst{1` and `2}`. Documented in README (*Metadata*: one `\inst{N}` per author). Decision to make: support it (brace-aware author split, then `\inst{1,2}` → `\aff{a}\aff{b}` / AGU `\affil{1}\affil{2}`) or reject it with a clear error |
 
 ---
 

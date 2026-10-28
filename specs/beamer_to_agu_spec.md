@@ -361,6 +361,7 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | Bare `\bibliography{}`/`\bibliographystyle{}` sitting between the appendix marker and the SI section | Left out of appendix content (`extract_appendix`'s `leftover` list), not swept into the last appendix's assembled body |
 | Appendix figure files from `extract_main.py`/`make_single_figure.sh` | Named sequentially (`figN.pdf`, document order), not `figA1.pdf`-style. Recorded limitation, not fixed |
 | `\label{}` on the appendix marker section | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.11. Unlike AMS, simply preserving the label would be sufficient here (AGU's `\section{}` correctly sets `\@currentlabel`); workaround meanwhile: label a `\subsection{}` inside the appendix instead |
+| Multi-affiliation `\inst{1,2}` | **Open item (found 2026-10-28).** Garbles the author list (shared `_AUTHOR_SEP_RE` splits on the comma inside the braces). See `beamer_to_ams_spec.md` §6 for the decision to make |
 
 ---
 

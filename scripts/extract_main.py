@@ -89,6 +89,10 @@ _THEFIGURE_RE = re.compile(r'\\renewcommand\\thefigure\{S\\arabic\{figure\}\}')
 _TC_IGNORE_RE = re.compile(r'^[ \t]*%TC:ignore[ \t]*$', re.MULTILINE)
 _TC_ENDIGNORE_RE = re.compile(r'^[ \t]*%TC:endignore[ \t]*$', re.MULTILINE)
 
+# Page break(s) left dangling at the end of the main text once the SI is cut.
+_TRAILING_PAGEBREAK_RE = re.compile(
+    r'(?:\s*\\(?:clearpage|cleardoublepage|newpage)\b)+\s*\Z')
+
 
 def find_si_start(text):
     """
@@ -117,8 +121,14 @@ def strip_si(text, si_start):
 
     If the truncation orphaned a %TC:ignore (its matching %TC:endignore was
     inside the removed SI), re-close it with a %TC:endignore before
-    \\end{document} so texcount doesn't run off the end of the file."""
-    main = text[:si_start].rstrip() + '\n'
+    \\end{document} so texcount doesn't run off the end of the file.
+
+    A trailing \\clearpage/\\newpage (the converters emit one just before
+    %% SI_BEGIN) is dropped: it only separated main text from SI, and left in
+    place it would push the SI label block (insert_si_label_block) onto an
+    empty page that LaTeX never ships out, so its \\label writes never reach
+    the .aux and every SI \\ref stays undefined."""
+    main = _TRAILING_PAGEBREAK_RE.sub('', text[:si_start].rstrip()) + '\n'
 
     n_open = len(_TC_IGNORE_RE.findall(main))
     n_close = len(_TC_ENDIGNORE_RE.findall(main))

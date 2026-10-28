@@ -351,6 +351,10 @@ def check_extract_main(text):
             f'{n_endignore} %TC:endignore')
     check('TC:endignore before \\end{document}', text,
           r'%TC:endignore\s*\\end\{document\}')
+    # trailing \clearpage before the SI label block would put its \label
+    # writes on an empty, never-shipped page (SI refs stay undefined)
+    check('no dangling \\clearpage before SI label block', text,
+          r'\\clearpage(?:\s|%TC:\w+)*\{\\renewcommand', present=False)
 
     # --- main-text figures retained ---
     check('main figure 1 retained',   text, r'plotA\.pdf')

@@ -283,8 +283,12 @@ def check_manuscript(text):
     # tabular wrapped in a table float; AMS excludes table captions from the
     # word count, so the caption is %TC:ignore-wrapped like figure captions
     check('table float wrapper',       text,
-          r'\\begin\{table\}\[h\]\s*\\centering\s*%TC:ignore\s*'
+          r'\\begin\{table\}\s*\\centering\s*%TC:ignore\s*'
           r'\\caption\{Comparison of forecast')
+    # no [h] on generated AMS floats: a tall [h] figure blocks the float
+    # queue and drifts pages from its first citation
+    check('no [h] placement on floats', text,
+          r'\\begin\{(figure|table)\}\[h\]', present=False)
     check('table label kept',          text, r'\\label\{tab:summary\}')
     check('bibliography',              text, r'\\bibliography\{refs\}')
     # bibliography must precede supplemental content (not end up after it)

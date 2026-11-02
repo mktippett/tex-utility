@@ -203,7 +203,14 @@ def _build_statement_block(pls_text):
 # AMS word-count rules exclude figure/table captions (unlike AGU, which counts
 # them) -- caption_tcignore=True wraps each generated \caption{} in
 # %TC:ignore/%TC:endignore so texcount -sum excludes it.
+#
+# placement='' (no [h]): AMS asks for floats near first citation, after a
+# paragraph. [h] gets demoted to [ht]; a tall figure then fits neither here
+# nor at a page top, cannot go to a float page, and holds every later float
+# in the queue until a \clearpage (Fig. 7 slid 10 pages in neuralGCM-TC,
+# 2026-11-02). The default tbp lets it go to a float page instead.
 _AMS_FIGURE_OPTS = {
+    'placement': '',
     'caption_tcignore': True,
 }
 
@@ -438,7 +445,7 @@ def convert(input_path, output_path):
     else:
         manuscript_body = assemble_body(main_events, figure_opts=_AMS_FIGURE_OPTS)
         if si_events:
-            si_body = assemble_body(si_events, figure_opts={'caption_tcignore': False})
+            si_body = assemble_body(si_events, figure_opts={'placement': '', 'caption_tcignore': False})
             if si_body.strip():
                 manuscript_body += '\n\n' + si_body
 

@@ -28,9 +28,10 @@ python $U/scripts/convert.py --format $J slides.tex main-and-si.tex
 #    AGU only: --journal "Geophysical Research Letters"  (default: JGR: Atmospheres)
 
 # 2. Compile (class files live in $U/agu or $U/ams) with the engine the
-#    journal's system uses: AMS builds with XeLaTeX, and pdflatex breaks
-#    lines differently, so reply line numbers would not match.
-E=xelatex        # AMS; pdflatex for AGU
+#    journal's system appears to use. AMS's system built one paper with
+#    XeLaTeX, and pdflatex breaks lines differently, so reply line numbers
+#    would not match. Not confirmed by AMS; see "AMS + XeLaTeX" below.
+E=xelatex        # AMS (unconfirmed); pdflatex for AGU
 TEXINPUTS=$U/$J/: $E main-and-si
 bibtex main-and-si
 TEXINPUTS=$U/$J/: $E main-and-si
@@ -66,6 +67,14 @@ Reminders:
 - **Replying to reviewers (AMS)?** Take line numbers from the PDF the
   submission system builds, or from an xelatex build. A pdflatex build
   drifts by a few lines (seen 2026-11-05: up to 3 lines by the Discussion).
+- **⚠ AMS + XeLaTeX is unconfirmed.** AMS documents nothing about XeLaTeX,
+  and the README that comes with their template says to use pdflatex. The
+  xelatex default here rests on one paper: the system PDF of
+  JAMC-D-26-0206_R1 matched a local xelatex build line for line, and a
+  pdflatex build did not. That may be a mistake on their side and not
+  their policy. AMS was emailed 2026-11-05; no reply yet. Until they
+  answer, compare your own system PDF with the local build, and use
+  `--engine pdflatex` if pdflatex matches it.
 - **Bibliography upkeep** lives in `~/tex/bib`: `make` regenerates
   `all_ams.bib`; `make doi-candidates` / `make doi-apply` add missing DOIs.
   See *Bibliography tools*.
@@ -121,7 +130,7 @@ If `main.tex` doesn't compile, it prints the LaTeX error and exits 1.
 | `--bbl FILE`, or a second positional `.aux` | they aren't `<stem>.bbl` / `<stem>.aux` |
 | `--no-bib` | you want `\bibliography{}` left live instead of inlined |
 | `--no-figures` | you want to keep the original `\includegraphics` paths |
-| `--engine pdflatex\|xelatex` | you want a different engine from the default (xelatex for the AMS class, which is what AMS's system uses; pdflatex otherwise) |
+| `--engine pdflatex\|xelatex` | you want a different engine from the default (xelatex for the AMS class, which matched AMS's system PDF on one paper but is not confirmed by AMS; pdflatex otherwise) |
 | `--no-compile` | you want to skip the test compile |
 | `--keep-intermediates` | you're debugging the figure or compile step |
 
@@ -182,8 +191,10 @@ make doi-apply        # insert those DOIs into all.bib (dated backup first)
 Things to fill in before sending to coauthors:
 
 **AMS:**
-- Compile with `xelatex`, not `pdflatex`: AMS's Editorial Manager builds
-  with XeLaTeX, and line numbers cited in a reply must match its PDF
+- Compile with `xelatex`, not `pdflatex`: AMS's Editorial Manager built
+  one paper with XeLaTeX, and line numbers cited in a reply must match its
+  PDF. AMS hasn't confirmed this, and their template README says pdflatex
+  (see "AMS + XeLaTeX is unconfirmed" above)
 - Corresponding author email — add `%% EMAIL: you@institution.edu` anywhere in
   the Beamer preamble (same sentinel as AGU); placeholder is used if absent
 - If sentinels were used: review the extracted `\acknowledgments` (COI text is
@@ -653,8 +664,10 @@ that into a main-text-only submission folder:
 - `main.tex` is then test-compiled in the output folder with **`TEXINPUTS`
   unset**, so only what's in the folder (plus the TeX installation) is
   visible — the publisher's situation. The engine is the one the journal's
-  system uses: `xelatex` for the AMS class (AMS's Editorial Manager builds
-  with XeLaTeX — verified 2026-11-05 against a JAMC system PDF), `pdflatex`
+  system appears to use: `xelatex` for the AMS class (a JAMC system PDF
+  matched an xelatex build on 2026-11-05; AMS hasn't confirmed this, and
+  their template README says pdflatex; see "AMS + XeLaTeX is
+  unconfirmed"), `pdflatex`
   otherwise (AGU's system not yet checked); `--engine` overrides. It runs
   the engine 2–4 times, until
   LaTeX stops asking for a rerun (3 is typical with citations), and reports

@@ -37,10 +37,11 @@ writes a main-text-only manuscript to an output directory:
   - main.tex is compiled twice in the output directory with TEXINPUTS
     unset, so a missing file fails here rather than at the publisher, and
     the log is summarized (undefined refs/citations, overfull boxes).
-    The engine matches the journal's submission system: xelatex for the
-    AMS class (AMS's Editorial Manager builds with XeLaTeX, which breaks
-    lines differently, so line numbers cited in a reply must come from an
-    xelatex build), pdflatex otherwise. Override with --engine.
+    The engine matches what the journal's submission system appears to
+    use: xelatex for the AMS class (one AMS system PDF matched an xelatex
+    build, which breaks lines differently from pdflatex; unconfirmed by
+    AMS, whose template README says pdflatex), pdflatex otherwise.
+    Override with --engine.
   - Build intermediates (make_single_figure.sh's main_figures.*, and
     main.aux/.out/.log) are deleted, leaving main.tex, figN.pdf, the support
     files, and main.pdf for checking. On a failed or unclean compile,
@@ -610,11 +611,14 @@ def summarize_log(log_text):
 
 MAX_PASSES = 4
 
-# Engine each journal's submission system compiles with. AMS (Editorial
-# Manager) builds with XeLaTeX: verified 2026-11-05 on JAMC-D-26-0206_R1,
-# whose system PDF matched a local xelatex build line for line and differed
-# from pdflatex by up to 3 line numbers. Unlisted classes (AGU included,
-# not yet checked) fall back to pdflatex.
+# Engine each journal's submission system appears to compile with. AMS
+# (Editorial Manager) built JAMC-D-26-0206_R1 with XeLaTeX: its system PDF
+# matched a local xelatex build line for line and differed from pdflatex by
+# up to 3 line numbers (2026-11-05). UNCONFIRMED: AMS documents nothing
+# about XeLaTeX, its template README says pdflatex, and this may be a
+# mistake on their side; AMS was emailed 2026-11-05. Revisit when they
+# reply. Unlisted classes (AGU included, not yet checked) fall back to
+# pdflatex.
 ENGINE_BY_CLASS_PREFIX = (('ametsoc', 'xelatex'),)
 DEFAULT_ENGINE = 'pdflatex'
 
@@ -893,8 +897,9 @@ def main():
     parser.add_argument('--engine', choices=('auto', 'pdflatex', 'xelatex'),
                          default='auto',
                          help='TeX engine for the test compile (default auto: '
-                              'xelatex for the AMS class, as AMS\'s submission '
-                              'system uses, pdflatex otherwise)')
+                              'xelatex for the AMS class, which matched one AMS '
+                              'system PDF but is unconfirmed by AMS; pdflatex '
+                              'otherwise)')
     args = parser.parse_args()
 
     extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,

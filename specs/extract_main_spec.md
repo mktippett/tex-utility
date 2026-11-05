@@ -29,7 +29,7 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
   measured width (§4.7 step 4).
 - Inlines the compiled `.bbl` in place of `\bibliography{}` and comments out
   `\bibliography{}`/`\bibliographystyle{}`, so `main.tex` compiles with
-  `pdflatex` alone (no `bibtex`, no `.bib` database needed on the
+  the TeX engine alone (no `bibtex`, no `.bib` database needed on the
   publisher's machine).
 - Copies the local `.cls`/`.sty`/`.bst` files `main.tex` loads into the
   output directory, test-compiles `main.tex` there with `TEXINPUTS` unset,
@@ -310,12 +310,31 @@ whether it really is installed).
 
 #### 4.9.2 Test compile (`compile_main` / `summarize_log`)
 
-Skipped with `--no-compile`. `pdflatex -interaction=nonstopmode
+Skipped with `--no-compile`. `<engine> -interaction=nonstopmode
 -halt-on-error main.tex` runs in `outdir` with `TEXINPUTS` **removed** from
 the environment, so only `outdir` and the TeX installation are searched —
 the publisher's situation. A file the folder needs but lacks becomes a
 compile error here instead of at the publisher. (`max_print_line=10000` is
 set so log lines aren't wrapped before regex scanning.)
+
+Engine (`choose_engine`, `--engine auto|pdflatex|xelatex`, default `auto`):
+the one the journal's submission system compiles with, so `main.pdf` matches
+the PDF reviewers see, and so do the line numbers cited in a reply.
+`ENGINE_BY_CLASS_PREFIX` maps a `\documentclass` name prefix to an engine:
+`ametsoc` → `xelatex`. Everything else, AGU's `agujournal2019` included, gets
+`DEFAULT_ENGINE = 'pdflatex'`, because AGU's system hasn't been checked.
+Rationale: AMS's Editorial Manager builds with XeLaTeX. XeLaTeX loads the
+OpenType TeX Gyre Termes X: same glyph widths and natural word space (3.0 pt
+at 12 pt) as pdflatex's Type 1 version, but interword stretch/shrink of
+1.5/1.0 pt instead of 2.4/1.2 pt. So it breaks lines differently; on
+JAMC-D-26-0206_R1, line numbers drifted by up to 3 lines by the Discussion.
+It also has no `TU/phv`, so `lineno`'s sans line numbers fall back to Latin
+Modern. A local xelatex build matched the system PDF page for page and line
+for line (2026-11-05). Forcing pdflatex-identical output under XeLaTeX from
+inside `main.tex` was tried and abandoned: `\setmainfont[WordSpace={1,1.6,1.2}]`
+recovered only ~80% of lines (rest off by 1). `newtxtext`'s `type1` option is
+a no-op under XeTeX. A `spcfactor={...}` list passed via
+`\PassOptionsToPackage` doesn't reach the package.
 
 Passes: at least 2, then more while the log says `Rerun to get` / `Label(s)
 may have changed`, up to `MAX_PASSES = 4`. A third pass is the normal case
@@ -330,10 +349,11 @@ undefined citations (with a note when `\bibliography{}` is still live, i.e.
 \hbox` lines. Undefined refs/citations or a pending rerun are warnings
 (exit 0) and mark the compile unclean; overfull boxes are reported only.
 
-A pdflatex failure prints the first three `!` error blocks from the log and
+A compile failure prints the first three `!` error blocks from the log and
 the log path, skips deletion of `main.log`, and makes the script exit 1 after
-the input-hash check. `pdflatex` missing from `PATH` aborts with a message
-pointing at `--no-compile`.
+the input-hash check. The engine missing from `PATH` aborts with a message
+pointing at `--no-compile`. The summary line names the engine
+(`Compiled main.pdf with xelatex (…)`).
 
 #### 4.9.3 Cleanup (`prune_intermediates`)
 
@@ -399,3 +419,4 @@ not touched.
 | 2026-10-28 | All 7 SI `\ref`s in a real AMS revision (`hdd-slides-r1_manuscript.tex`) stayed undefined in `main.tex` after two `pdflatex` passes, although the SI label block was present. The converters emit `\clearpage` *before* `%% SI_BEGIN`, so it survived truncation and put the label block on an empty page that LaTeX never outputs; its `\label` writes never reached `main.aux`. Fixed in `strip_si` by dropping trailing `\clearpage`/`\cleardoublepage`/`\newpage` (§4.2). Also, `tests/test_main_si.tex` had the `\clearpage` *after* the sentinel, unlike real converter output, so the bug never showed in tests. The fixture now puts it before the sentinel, and `check_extract_main` asserts that no `\clearpage` comes before the label block; the check was confirmed to fail on the old code. Re-verified on the real paper: 0 undefined references | Yes |
 | 2026-10-28 | Folded the manual post-extraction steps into the script (§4.9): copy local `.cls`/`.sty`/`.bst` from the input dir or `ams/`/`agu/`; test-compile `main.tex` in `outdir` with `TEXINPUTS` unset (2–4 passes, until no rerun request), summarizing undefined refs/citations and overfull boxes, exit 1 on failure; prune `main_figures.*`/`main.aux`/`.out`/`.log`. New flags `--no-compile`, `--keep-intermediates`. Real paper (`hdd-slides-r1_manuscript.tex`): class copied, 37 pages in 3 passes, 0 undefined refs/citations, folder left with `main.tex`, `fig1–10.pdf`, `ametsocV6.1.cls`, `main.pdf`. New e2e test `check_compile_and_package` (support-file copy, commented `\usepackage` ignored, pruning, TEXINPUTS-only `.sty` → exit 1 with `main.log` kept); it caught a bug during development where a failed compile exited 0. Existing extract_main tests now pass `--no-compile` | Yes |
 | 2026-11-05 | Multi-panel figures came out too narrow in `main.tex`: `rewrite_figure_includes` kept the *first panel's* `[opts]` on the composite include, so a two-panel `0.49\linewidth` + `0.49\linewidth` figure became one `\includegraphics[width=0.49\linewidth]{fig8.pdf}` (half-width composite), plus a blank line where the second include had been. The unit test asserted that behavior. Fixed (§4.7 step 4): composite width is measured from the cropped figN.pdf relative to the harness `\textwidth`, ≥0.95 snapped to `\linewidth`; emptied lines are dropped; single-panel options unchanged. Tests: unmeasured → `\linewidth`, measured 0.6 → `0.6\linewidth`, measured 0.98 → `\linewidth`, no blank line. Real paper (`hdd-slides-r1_manuscript.tex`): figs 8 and 10 (was 0.49 each) → `\linewidth`, 0 undefined refs, 0 overfull boxes | Yes |
+| 2026-11-05 | Test compile now uses the journal system's engine (§4.9.2): new `choose_engine` / `ENGINE_BY_CLASS_PREFIX` (`ametsoc` → `xelatex`, else `pdflatex`) and `--engine auto\|pdflatex\|xelatex`; `compile_main(out_tex, engine)`; messages name the engine. Prompted by a user comparing their pdflatex `main.pdf` with AMS's Editorial Manager PDF of JAMC-D-26-0206_R1: different spacing and line-number font, reply line numbers off by up to 3. Root cause verified by reproducing the system PDF exactly with a local xelatex build. New unit test `check_choose_engine_unit` (AMS → xelatex; AGU/article/commented-out class/no class → pdflatex); `check_compile_and_package` regex updated for the engine in the summary line. Real paper re-run: `Compiled main.pdf with xelatex (37 pages, 3 passes …): 0 undefined ref(s), 0 undefined citation(s)`; all 37 pages' first/last line numbers match the system PDF. Side note recorded in README: the combined main+SI PDF can still break main-text pages differently from `main.pdf`, because cropped `figN.pdf` composites are a fraction of a percent smaller than the original plots (seen: lines 311–312 moved across a page). Line numbers are unaffected, and the SI split is unaffected | Yes |

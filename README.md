@@ -27,11 +27,14 @@ J=agu            # or ams
 python $U/scripts/convert.py --format $J slides.tex main-and-si.tex
 #    AGU only: --journal "Geophysical Research Letters"  (default: JGR: Atmospheres)
 
-# 2. Compile (class files live in $U/agu or $U/ams)
-TEXINPUTS=$U/$J/: pdflatex main-and-si
+# 2. Compile (class files live in $U/agu or $U/ams) with the engine the
+#    journal's system uses: AMS builds with XeLaTeX, and pdflatex breaks
+#    lines differently, so reply line numbers would not match.
+E=xelatex        # AMS; pdflatex for AGU
+TEXINPUTS=$U/$J/: $E main-and-si
 bibtex main-and-si
-TEXINPUTS=$U/$J/: pdflatex main-and-si
-TEXINPUTS=$U/$J/: pdflatex main-and-si
+TEXINPUTS=$U/$J/: $E main-and-si
+TEXINPUTS=$U/$J/: $E main-and-si
 
 # 3. SI PDF: open main-and-si.pdf, note the page where the SI starts (e.g. 18)
 python $U/scripts/split_pdf.py main-and-si.pdf 18
@@ -39,8 +42,9 @@ python $U/scripts/split_pdf.py main-and-si.pdf 18
 
 # 4. Main-text package (never modifies main-and-si.tex). Also copies the
 #    class file in, test-compiles main.pdf with TEXINPUTS unset, and deletes
-#    the build leftovers. Read its last lines: "0 undefined ref(s),
-#    0 undefined citation(s)" means the folder is ready.
+#    the build leftovers (xelatex for AMS, pdflatex otherwise). Read its
+#    last lines: "0 undefined ref(s), 0 undefined citation(s)" means the
+#    folder is ready.
 python $U/scripts/extract_main.py main-and-si.tex
 #    -> main-and-si_SUBMIT/main.tex, fig1.pdf, ..., <class>.cls, main.pdf
 #    no SI in the deck? add --no-si
@@ -59,6 +63,9 @@ Reminders:
   to `ametsocV6` (see *Bibliography*).
 - **After converting**, work through the checklist in *After conversion*
   (key points, PLS, email, word count, ...).
+- **Replying to reviewers (AMS)?** Take line numbers from the PDF the
+  submission system builds, or from an xelatex build. A pdflatex build
+  drifts by a few lines (seen 2026-11-05: up to 3 lines by the Discussion).
 - **Bibliography upkeep** lives in `~/tex/bib`: `make` regenerates
   `all_ams.bib`; `make doi-candidates` / `make doi-apply` add missing DOIs.
   See *Bibliography tools*.
@@ -104,7 +111,7 @@ Compile `main-and-si.tex` first: the script reads its `.aux` and `.bbl`. It
 never writes to the input. Output goes to `<stem>_SUBMIT/`: `main.tex`,
 `fig1.pdf`, …, the journal `.cls`, and `main.pdf` (for checking only; don't
 upload it). Its last lines tell you whether the folder is ready:
-`Compiled main.pdf (…): 0 undefined ref(s), 0 undefined citation(s)`.
+`Compiled main.pdf with xelatex (…): 0 undefined ref(s), 0 undefined citation(s)`.
 If `main.tex` doesn't compile, it prints the LaTeX error and exits 1.
 
 | Option | Use when |
@@ -114,6 +121,7 @@ If `main.tex` doesn't compile, it prints the LaTeX error and exits 1.
 | `--bbl FILE`, or a second positional `.aux` | they aren't `<stem>.bbl` / `<stem>.aux` |
 | `--no-bib` | you want `\bibliography{}` left live instead of inlined |
 | `--no-figures` | you want to keep the original `\includegraphics` paths |
+| `--engine pdflatex\|xelatex` | you want a different engine from the default (xelatex for the AMS class, which is what AMS's system uses; pdflatex otherwise) |
 | `--no-compile` | you want to skip the test compile |
 | `--keep-intermediates` | you're debugging the figure or compile step |
 
@@ -123,6 +131,10 @@ Gotchas:
 - The test compile ignores your `TEXINPUTS`, as the publisher would. A
   package found only through `TEXINPUTS` makes it fail: put a copy next to
   `main-and-si.tex` and rerun.
+- Page breaks in the main-text part of `main-and-si.pdf` can differ slightly
+  from `main.pdf`, because the cropped `figN.pdf` files come out a little
+  smaller than the original plots. Line numbers are the same. Take page and
+  line numbers for a reply from `main.pdf` or the journal's PDF.
 
 Details: *What extract_main.py does*.
 
@@ -170,6 +182,8 @@ make doi-apply        # insert those DOIs into all.bib (dated backup first)
 Things to fill in before sending to coauthors:
 
 **AMS:**
+- Compile with `xelatex`, not `pdflatex`: AMS's Editorial Manager builds
+  with XeLaTeX, and line numbers cited in a reply must match its PDF
 - Corresponding author email — add `%% EMAIL: you@institution.edu` anywhere in
   the Beamer preamble (same sentinel as AGU); placeholder is used if absent
 - If sentinels were used: review the extracted `\acknowledgments` (COI text is
@@ -480,7 +494,7 @@ slides.tex   (Beamer deck)
     v
 main-and-si.tex   (main text + SI in one file; %% SI_BEGIN marks the boundary)
     |
-    |  pdflatex (x2-3) + bibtex
+    |  xelatex (AMS) / pdflatex (AGU), x2-3, + bibtex
     v
 main-and-si.pdf + main-and-si.aux + main-and-si.bbl
     |
@@ -630,7 +644,7 @@ that into a main-text-only submission folder:
 - The compiled `.bbl` (from the same `bibtex` run that produced the `.aux`)
   is inlined as a `thebibliography` environment in place of
   `\bibliography{}`, and `\bibliography{}`/`\bibliographystyle{}` are
-  commented out — so `main.tex` compiles with `pdflatex` alone, with no
+  commented out — so `main.tex` compiles with the TeX engine alone, with no
   `bibtex` run and no `.bib` database needed on the publisher's machine.
 - Local `.cls`/`.sty` files that `main.tex` loads are copied into the output
   folder — taken from next to the combined `.tex` if there (your paper's own
@@ -638,7 +652,11 @@ that into a main-text-only submission folder:
   in neither place is assumed to be part of the TeX installation.
 - `main.tex` is then test-compiled in the output folder with **`TEXINPUTS`
   unset**, so only what's in the folder (plus the TeX installation) is
-  visible — the publisher's situation. It runs `pdflatex` 2–4 times, until
+  visible — the publisher's situation. The engine is the one the journal's
+  system uses: `xelatex` for the AMS class (AMS's Editorial Manager builds
+  with XeLaTeX — verified 2026-11-05 against a JAMC system PDF), `pdflatex`
+  otherwise (AGU's system not yet checked); `--engine` overrides. It runs
+  the engine 2–4 times, until
   LaTeX stops asking for a rerun (3 is typical with citations), and reports
   pages, undefined references/citations, and overfull boxes. A failed
   compile prints the LaTeX error and exits 1. A package that compiled

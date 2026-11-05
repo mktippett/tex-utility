@@ -29,14 +29,18 @@ writes a main-text-only manuscript to an output directory:
     sized to the composite's measured width).
   - The compiled .bbl is inlined as a thebibliography environment in place
     of \\bibliography{}, and \\bibliography{}/\\bibliographystyle{} are
-    commented out, so main.tex compiles with pdflatex alone (no bibtex,
-    no .bib database needed on the publisher's machine).
+    commented out, so main.tex compiles with a single TeX engine and no
+    bibtex (no .bib database needed on the publisher's machine).
   - Local .cls/.sty/.bst files that main.tex loads are copied into the
     output directory (looked up next to COMBINED.tex, then in this repo's
     ams/ and agu/); anything not found there is assumed installed.
   - main.tex is compiled twice in the output directory with TEXINPUTS
     unset, so a missing file fails here rather than at the publisher, and
     the log is summarized (undefined refs/citations, overfull boxes).
+    The engine matches the journal's submission system: xelatex for the
+    AMS class (AMS's Editorial Manager builds with XeLaTeX, which breaks
+    lines differently, so line numbers cited in a reply must come from an
+    xelatex build), pdflatex otherwise. Override with --engine.
   - Build intermediates (make_single_figure.sh's main_figures.*, and
     main.aux/.out/.log) are deleted, leaving main.tex, figN.pdf, the support
     files, and main.pdf for checking. On a failed or unclean compile,
@@ -592,7 +596,7 @@ _TEX_ERROR_RE = re.compile(r'^!.*(?:\n.*){0,2}', re.MULTILINE)
 
 
 def summarize_log(log_text):
-    """Pull the submission-relevant facts out of a pdflatex .log."""
+    """Pull the submission-relevant facts out of a pdflatex/xelatex .log."""
     m = _PAGES_RE.search(log_text)
     return {
         'pages': int(m.group(1)) if m else None,
@@ -606,10 +610,28 @@ def summarize_log(log_text):
 
 MAX_PASSES = 4
 
+# Engine each journal's submission system compiles with. AMS (Editorial
+# Manager) builds with XeLaTeX: verified 2026-11-05 on JAMC-D-26-0206_R1,
+# whose system PDF matched a local xelatex build line for line and differed
+# from pdflatex by up to 3 line numbers. Unlisted classes (AGU included,
+# not yet checked) fall back to pdflatex.
+ENGINE_BY_CLASS_PREFIX = (('ametsoc', 'xelatex'),)
+DEFAULT_ENGINE = 'pdflatex'
 
-def compile_main(out_tex):
+
+def choose_engine(text):
+    """Engine for the test compile, from main.tex's \\documentclass."""
+    class_file, _ = support_file_names(text)
+    if class_file:
+        for prefix, engine in ENGINE_BY_CLASS_PREFIX:
+            if class_file.startswith(prefix):
+                return engine
+    return DEFAULT_ENGINE
+
+
+def compile_main(out_tex, engine=DEFAULT_ENGINE):
     """
-    Run pdflatex on out_tex in its own directory, with TEXINPUTS unset so
+    Run engine (pdflatex or xelatex) on out_tex in its own directory, with TEXINPUTS unset so
     only files in the output directory (plus the TeX installation) are
     found -- the same situation as the publisher's flat folder.
 
@@ -618,14 +640,14 @@ def compile_main(out_tex):
     pass is normal: citations print as '?' on the first pass, so filling
     them in on the second moves floats and changes label page numbers.
 
-    Returns (ok, summary, n_passes): ok is False if pdflatex failed;
+    Returns (ok, summary, n_passes): ok is False if the engine failed;
     summary is summarize_log() of the final pass, or None if no log was
     written.
     """
     env = os.environ.copy()
     env.pop('TEXINPUTS', None)
     env['max_print_line'] = '10000'  # unwrapped log lines, for the regexes
-    cmd = ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', out_tex.name]
+    cmd = [engine, '-interaction=nonstopmode', '-halt-on-error', out_tex.name]
     log = out_tex.with_suffix('.log')
     ok = True
     summary = None
@@ -635,7 +657,7 @@ def compile_main(out_tex):
             result = subprocess.run(cmd, cwd=out_tex.parent, env=env,
                                     capture_output=True)
         except FileNotFoundError:
-            sys.exit('pdflatex not found on PATH; rerun with --no-compile.')
+            sys.exit(f'{engine} not found on PATH; rerun with --no-compile.')
         n_passes += 1
         summary = (summarize_log(log.read_text(encoding='utf-8', errors='replace'))
                    if log.exists() else None)
@@ -649,7 +671,7 @@ def compile_main(out_tex):
 
 def prune_intermediates(outdir, keep_log):
     """Delete build intermediates from outdir: make_single_figure.sh's
-    main_figures.* and pdflatex's main.aux/.out (and main.log unless
+    main_figures.* and the engine's main.aux/.out (and main.log unless
     keep_log). Only these known names are touched. Returns the names
     removed."""
     names = [f'main_figures.{ext}' for ext in ('tex', 'pdf', 'log', 'aux')]
@@ -669,7 +691,7 @@ def prune_intermediates(outdir, keep_log):
 
 def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
                   make_figures=True, inline_bib=True, no_si=False,
-                  compile_pdf=True, keep_intermediates=False):
+                  compile_pdf=True, keep_intermediates=False, engine='auto'):
     """
     Write a main-text-only manuscript derived from combined_tex into outdir.
 
@@ -690,6 +712,8 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     compile_pdf  : if True, test-compile main.tex in outdir (compile_main)
                    and exit with status 1 if that fails
     keep_intermediates : if True, skip prune_intermediates
+    engine       : 'pdflatex', 'xelatex', or 'auto' (choose_engine: the
+                   journal submission system's engine for this class)
 
     Returns the path to the written main.tex.
     """
@@ -793,16 +817,18 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     compile_failed = False
     clean = True
     if compile_pdf:
-        ok, summary, n_passes = compile_main(out_tex)
+        if engine == 'auto':
+            engine = choose_engine(final_text)
+        ok, summary, n_passes = compile_main(out_tex, engine)
         if not ok:
             compile_failed, clean = True, False
-            print(f'ERROR: test compile of {out_tex} failed on pdflatex pass '
+            print(f'ERROR: test compile of {out_tex} failed on {engine} pass '
                   f'{n_passes} (TEXINPUTS unset):', file=sys.stderr)
             for err in (summary or {}).get('errors', [])[:3]:
                 print('  ' + err.replace('\n', '\n  '), file=sys.stderr)
             print(f'  Full log: {out_tex.with_suffix(".log")}', file=sys.stderr)
         elif summary is None:
-            print('Warning: pdflatex succeeded but wrote no main.log; '
+            print(f'Warning: {engine} succeeded but wrote no main.log; '
                   'compile not checked.', file=sys.stderr)
         else:
             problems = []
@@ -817,8 +843,8 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
             if summary['rerun']:
                 problems.append(f'LaTeX still asks for a rerun after {n_passes} passes')
             clean = not problems
-            print(f'Compiled main.pdf ({summary["pages"]} pages, {n_passes} passes, '
-                  'TEXINPUTS unset): '
+            print(f'Compiled main.pdf with {engine} ({summary["pages"]} pages, '
+                  f'{n_passes} passes, TEXINPUTS unset): '
                   f'{len(summary["undefined_refs"])} undefined ref(s), '
                   f'{len(summary["undefined_cites"])} undefined citation(s), '
                   f'{summary["overfull"]} overfull \\hbox(es)')
@@ -864,6 +890,11 @@ def main():
                          help='Skip the test compile of main.tex')
     parser.add_argument('--keep-intermediates', action='store_true',
                          help='Keep main_figures.* and main.aux/.out/.log')
+    parser.add_argument('--engine', choices=('auto', 'pdflatex', 'xelatex'),
+                         default='auto',
+                         help='TeX engine for the test compile (default auto: '
+                              'xelatex for the AMS class, as AMS\'s submission '
+                              'system uses, pdflatex otherwise)')
     args = parser.parse_args()
 
     extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,
@@ -871,7 +902,8 @@ def main():
                   inline_bib=not args.no_bib,
                   no_si=args.no_si,
                   compile_pdf=not args.no_compile,
-                  keep_intermediates=args.keep_intermediates)
+                  keep_intermediates=args.keep_intermediates,
+                  engine=args.engine)
 
 
 if __name__ == '__main__':

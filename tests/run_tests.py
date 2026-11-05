@@ -822,7 +822,7 @@ def check_compile_and_package():
             if (out / name).exists():
                 _failures.append(f'  FAIL  package: {name} should not be in output')
         check('package: clean compile reported', result.stdout,
-              r'Compiled main\.pdf \(\d+ pages, \d+ passes, TEXINPUTS unset\): '
+              r'Compiled main\.pdf with pdflatex \(\d+ pages, \d+ passes, TEXINPUTS unset\): '
               r'0 undefined ref\(s\), 0 undefined citation\(s\)')
 
         # --- TEXINPUTS is not passed through: a .sty reachable only via
@@ -857,6 +857,26 @@ def check_rebase_paths_unit():
     check('rebase relative path', new_text, r'\{\.\./\.\./plots/a\.pdf\}')
     check('rebase keeps options', new_text, r'\[width=\\linewidth\]\{\.\./\.\./plots/a\.pdf\}')
     check('rebase leaves absolute', new_text, r'\{/abs/path/b\.pdf\}')
+
+
+def check_choose_engine_unit():
+    """Test-compile engine follows the journal's submission system: xelatex
+    for the AMS class (AMS Editorial Manager builds with XeLaTeX), pdflatex
+    for everything else; a commented-out \\documentclass is ignored."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import extract_main as em
+
+    cases = [
+        ('\\documentclass{ametsocV6.1}\n', 'xelatex'),
+        ('\\documentclass[draft]{agujournal2019}\n', 'pdflatex'),
+        ('\\documentclass{article}\n', 'pdflatex'),
+        ('%\\documentclass{ametsocV6.1}\n\\documentclass{article}\n', 'pdflatex'),
+        ('no class here\n', 'pdflatex'),
+    ]
+    for text, want in cases:
+        got = em.choose_engine(text)
+        if got != want:
+            _failures.append(f'  FAIL  choose_engine({text!r}): expected {want}, got {got}')
 
 
 def check_figure_rewrite_unit():
@@ -999,6 +1019,7 @@ def main():
         ('single appendix + --no-si (e2e)', check_appendix_paths),
         ('text-only SI checklist (e2e)', check_text_only_si),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),
+        ('test-compile engine choice (unit)', check_choose_engine_unit),
         ('extract_main support files + test compile (e2e)', check_compile_and_package),
     ]
     for section, fn in unit_sections:

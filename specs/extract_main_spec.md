@@ -336,6 +336,19 @@ recovered only ~80% of lines (rest off by 1). `newtxtext`'s `type1` option is
 a no-op under XeTeX. A `spcfactor={...}` list passed via
 `\PassOptionsToPackage` doesn't reach the package.
 
+Telling a submission system's engine from its PDF: journal systems overwrite
+the PDF's Producer field (Editorial Manager stamps it as iTextSharp), so run
+`pdffonts` on a manuscript page. Signatures, from local newtx builds
+2026-11-05:
+- pdflatex: text fonts are `Type 1` with no suffix.
+- xelatex: text fonts are `CID Type 0C` with a `-Identity-H` name suffix, and
+  the Type 1 math fonts (`txsys`, `txmiaX`) are `Type 1C`.
+- lualatex: text fonts are `CID Type 0C` with no suffix, and the math fonts
+  stay `Type 1`.
+The AMS system PDF had the xelatex signature. Use this to settle AGU's engine
+on the next AGU submission, then add it to `ENGINE_BY_CLASS_PREFIX`. LuaLaTeX
+gave the same line breaks as XeLaTeX on the real paper.
+
 Passes: at least 2, then more while the log says `Rerun to get` / `Label(s)
 may have changed`, up to `MAX_PASSES = 4`. A third pass is the normal case
 for a document with citations: pass 1 prints citations as `?`, pass 2 fills

@@ -875,10 +875,39 @@ def check_figure_rewrite_unit():
 
     check('rewrite fig1 (bare filename)',
           new_text, r'\\includegraphics\[width=\\linewidth\]\{fig1\.pdf\}')
-    check('rewrite fig2 (first panel -> figN.pdf)',
-          new_text, r'\\includegraphics\[width=0\.49\\linewidth\]\{fig2\.pdf\}')
+    # No fig_dir -> composite can't be measured -> full \linewidth, never
+    # the first panel's 0.49\linewidth (that squeezed the whole composite
+    # into half the line).
+    check('rewrite fig2 (unmeasured composite -> \\linewidth)',
+          new_text, r'\\includegraphics\[width=\\linewidth\]\{fig2\.pdf\}')
     check('rewrite fig2 (second panel removed)',
           new_text, r'plotB2\.pdf', present=False)
+    check('rewrite fig2 (no blank line left by removed panel)',
+          new_text, r'fig2\.pdf\}\n  \\caption\{B\}')
+
+    # Measured composite: a fake 0.6*textwidth-wide fig2.pdf (+ pdfcrop's
+    # 1bp margins) must give width=0.6\linewidth.
+    def measured_rewrite(frac):
+        with tempfile.TemporaryDirectory() as td:
+            w = frac * em.HARNESS_TEXTWIDTH_BP + 2 * em.PDFCROP_MARGIN_BP
+            (Path(td) / 'fake.tex').write_text(
+                '\\pdfpagewidth=%.3fbp \\pdfpageheight=100bp\n'
+                '\\shipout\\hbox{}\\end\n' % w)
+            subprocess.run(['pdftex', '-interaction=nonstopmode', 'fake.tex'],
+                           cwd=td, capture_output=True)
+            (Path(td) / 'fake.pdf').rename(Path(td) / 'fig2.pdf')
+            return em.rewrite_figure_includes(_FIGURE_REWRITE_SAMPLE,
+                                              fig_dir=td)[0]
+
+    measured = measured_rewrite(0.6)
+    check('rewrite fig2 (measured composite width)',
+          measured, r'\\includegraphics\[width=0\.6\\linewidth\]\{fig2\.pdf\}')
+    # 2 x 0.49\linewidth panels -> ~0.98: snapped to the full line.
+    check('rewrite fig2 (near-full composite snaps to \\linewidth)',
+          measured_rewrite(0.98),
+          r'\\includegraphics\[width=\\linewidth\]\{fig2\.pdf\}')
+    check('rewrite fig1 (single panel keeps its options)',
+          measured, r'\\includegraphics\[width=\\linewidth\]\{fig1\.pdf\}')
     check('commented figure block preserved verbatim',
           new_text, r'% \\includegraphics\{template_example\.pdf\}')
 

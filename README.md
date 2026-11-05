@@ -625,7 +625,8 @@ that into a main-text-only submission folder:
   `\includegraphics` is rewritten to the bare filename `figN.pdf` — no
   directory path — so the output compiles in the publisher's flat
   submission folder. Multi-panel figures collapse to the single cropped
-  composite.
+  composite, sized to its measured width (near-full-width composites, e.g.
+  two `0.49\linewidth` panels, become `\linewidth`).
 - The compiled `.bbl` (from the same `bibtex` run that produced the `.aux`)
   is inlined as a `thebibliography` environment in place of
   `\bibliography{}`, and `\bibliography{}`/`\bibliographystyle{}` are

@@ -25,7 +25,8 @@ writes a main-text-only manuscript to an output directory:
   - Each \\begin{figure}...\\end{figure} block is extracted into its own
     fig1.pdf, fig2.pdf, ... (via make_single_figure.sh) and the
     \\includegraphics path(s) in main.tex are rewritten to the bare
-    "figN.pdf" filename (multi-panel figures collapse to one image).
+    "figN.pdf" filename (multi-panel figures collapse to one image,
+    sized to the composite's measured width).
   - The compiled .bbl is inlined as a thebibliography environment in place
     of \\bibliography{}, and \\bibliography{}/\\bibliographystyle{} are
     commented out, so main.tex compiles with pdflatex alone (no bibtex,
@@ -392,14 +393,53 @@ def count_figure_envs(text):
     return sum(1 for _ in _live_figure_envs(text))
 
 
-def rewrite_figure_includes(text):
+# make_single_figure.sh's harness: letter paper with 1in margins, so
+# \textwidth = 6.5in = 468bp; pdfcrop --margins 1 adds 1bp on each side.
+HARNESS_TEXTWIDTH_BP = 6.5 * 72
+PDFCROP_MARGIN_BP = 1
+# Side-by-side panels are conventionally sized just under half/third of the
+# line (0.49, 0.32) only to keep them on one line; the composite has no line
+# to break, so a near-full-width composite is snapped to \linewidth.
+SNAP_TO_LINEWIDTH = 0.95
+
+
+def pdf_width_bp(pdf_path):
+    """Page width of a single-page PDF in bp (via pdfinfo), or None if it
+    can't be determined."""
+    try:
+        out = subprocess.run(['pdfinfo', str(pdf_path)], capture_output=True,
+                             text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    m = re.search(r'^Page size:\s*([\d.]+)\s*x', out, re.MULTILINE)
+    return float(m.group(1)) if m else None
+
+
+def composite_width_fraction(pdf_path):
+    """Width of a cropped composite figN.pdf as a fraction of the harness
+    \\textwidth (rounded to 2 decimals, capped at 1), or None if unknown."""
+    w = pdf_width_bp(pdf_path)
+    if w is None:
+        return None
+    frac = (w - 2 * PDFCROP_MARGIN_BP) / HARNESS_TEXTWIDTH_BP
+    return 1.0 if frac >= SNAP_TO_LINEWIDTH else round(frac, 2)
+
+
+def rewrite_figure_includes(text, fig_dir=None):
     """
     Within each \\begin{figure}...\\end{figure} block, in document order,
     replace the first \\includegraphics{...}'s path with a bare 'figN.pdf'
     (N = 1-based position among figure environments, matching the page
-    order make_single_figure.sh produces), keeping any [options]. Any
-    additional \\includegraphics in the same block (multi-panel figures)
-    are removed, since fig N.pdf is the single cropped composite.
+    order make_single_figure.sh produces).
+
+    Single-panel figures keep their [options]: figN.pdf is the same image,
+    cropped. Multi-panel figures (2+ \\includegraphics in one block) collapse
+    to one include of the composite; the per-panel options (e.g.
+    width=0.49\\linewidth) don't describe the composite, so they are
+    replaced by width=F\\linewidth, F = the cropped composite's width over
+    the harness \\textwidth (read from fig_dir/figN.pdf; \\linewidth if that
+    can't be measured). Lines left empty by removing the extra includes are
+    dropped.
 
     Returns (new_text, n_figs).
     """
@@ -411,14 +451,30 @@ def rewrite_figure_includes(text):
         n += 1
         block = m.group(0)
         matches = list(_INCLUDEGRAPHICS_RE.finditer(block))
-        if matches:
-            for im in reversed(matches):
-                if im is matches[0]:
-                    opts = im.group(1) or ''
-                    repl = r'\includegraphics' + opts + '{fig' + str(n) + '.pdf}'
-                else:
-                    repl = ''
+        if len(matches) > 1:
+            frac = (composite_width_fraction(Path(fig_dir) / f'fig{n}.pdf')
+                    if fig_dir is not None else None)
+            if frac is None:
+                print(f'Warning: could not measure fig{n}.pdf; using '
+                      r'width=\linewidth for the multi-panel composite.',
+                      file=sys.stderr)
+                frac = 1.0
+            width = r'\linewidth' if frac >= 1.0 else f'{frac:g}' + r'\linewidth'
+            first_opts = '[width=' + width + ']'
+        for im in reversed(matches):
+            if im is matches[0]:
+                opts = first_opts if len(matches) > 1 else (im.group(1) or '')
+                repl = r'\includegraphics' + opts + '{fig' + str(n) + '.pdf}'
                 block = block[:im.start()] + repl + block[im.end():]
+            else:
+                # Remove the include; drop its line too if nothing else is on it.
+                ls = block.rfind('\n', 0, im.start()) + 1
+                le = block.find('\n', im.end())
+                le = len(block) if le == -1 else le
+                if (block[ls:im.start()] + block[im.end():le]).strip() == '':
+                    block = block[:ls] + block[le + 1:]
+                else:
+                    block = block[:im.start()] + block[im.end():]
         out_parts.append(block)
         last_end = m.end()
     out_parts.append(text[last_end:])
@@ -721,7 +777,7 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
         else:
             make_single_figures(out_tex, n_figs)
             final_text, n_rewritten = rewrite_figure_includes(
-                out_tex.read_text(encoding='utf-8'))
+                out_tex.read_text(encoding='utf-8'), fig_dir=out_tex.parent)
             out_tex.write_text(final_text, encoding='utf-8')
             print(f'Generated fig1.pdf ... fig{n_figs}.pdf '
                   f'({n_rewritten} figure environment(s) rewritten)')

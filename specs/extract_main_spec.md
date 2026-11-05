@@ -25,7 +25,8 @@ main text resolves directly to SI item numbers (e.g. `S1`, `S2`). This script:
 - Extracts each `\begin{figure}...\end{figure}` block into its own
   `figN.pdf` (via `make_single_figure.sh`) and rewrites the
   `\includegraphics` path(s) to the bare filename `figN.pdf`, collapsing
-  multi-panel figures to the single cropped composite.
+  multi-panel figures to the single cropped composite, sized from its
+  measured width (§4.7 step 4).
 - Inlines the compiled `.bbl` in place of `\bibliography{}` and comments out
   `\bibliography{}`/`\bibliographystyle{}`, so `main.tex` compiles with
   `pdflatex` alone (no `bibtex`, no `.bib` database needed on the
@@ -262,8 +263,20 @@ relative paths.
    (bare filename, no directory — so the output compiles in a flat
    submission folder) and **remove** any additional `\includegraphics` in
    that block (multi-panel figures collapse to the single cropped
-   composite). Commented-out blocks and all text outside live figure
-   environments pass through unchanged.
+   composite), dropping the line too when the include was alone on it.
+   Commented-out blocks and all text outside live figure environments pass
+   through unchanged.
+   - **Single-panel** blocks keep the include's `[opts]` (figN.pdf is the
+     same image, cropped).
+   - **Multi-panel** blocks: the first panel's `[opts]` (e.g.
+     `width=0.49\linewidth`) describe one panel, not the composite, so they
+     are replaced by `[width=F\linewidth]`. `F` = (figN.pdf page width from
+     `pdfinfo` − 2 × `PDFCROP_MARGIN_BP` (1bp)) / `HARNESS_TEXTWIDTH_BP`
+     (6.5in = 468bp, the harness's letter-minus-1in-margins `\textwidth`),
+     rounded to 2 decimals. If `F ≥ SNAP_TO_LINEWIDTH` (0.95) it is snapped
+     to `\linewidth`: sub-half widths like 0.49 exist only to keep panels
+     on one line, which the composite doesn't need. If figN.pdf can't be
+     measured, `\linewidth` + warning.
 
 ### 4.8 Safety
 
@@ -348,7 +361,8 @@ not touched.
 | `\pageref{}` to an SI label | Flattened to literal page number from `.aux` (no label to reconstruct — SI page numbering doesn't exist in `main.tex`) |
 | `\autoref`/`\cref`/`\Cref` to an SI label whose counter can't be guessed from its name (no `fig:`/`tab:`/`eq:` prefix) | `\ref{}`/`\eqref{}` still resolve; noun may be missing/wrong + warning (manual fix) |
 | Commented-out `\begin{figure}...\end{figure}` (template boilerplate) | Skipped — not counted, not rewritten, passed through verbatim |
-| Multi-panel figure (2+ `\includegraphics` in one `\begin{figure}`) | Collapses to one `\includegraphics{figN.pdf}`; extra includes removed |
+| Multi-panel figure (2+ `\includegraphics` in one `\begin{figure}`) | Collapses to one `\includegraphics[width=F\linewidth]{figN.pdf}` (F measured, ≥0.95 → `\linewidth`; §4.7 step 4); extra includes and their emptied lines removed |
+| Multi-panel composite can't be measured (`pdfinfo` missing/fails) | `width=\linewidth` + warning |
 | No live figure environments | Figure extraction skipped entirely |
 | `--no-figures` | SI strip + ref flattening only; `\includegraphics` paths untouched |
 | `--outdir`/output path would collide with input `.tex` | Abort before writing |
@@ -384,3 +398,4 @@ not touched.
 | 2026-09-15 | No code change (appendix support landed in both converters, see `beamer_to_ams_spec.md` §4.10 / `beamer_to_agu_spec.md` §4.11) — this script needed none, by construction (§5). Verified rather than assumed: appendix content added to `tests/test_main_si.tex` (before `%% SI_BEGIN`) with an `A1`-ref `\newlabel` in `tests/test_main_si.aux`; `check_extract_main` extended to assert the appendix figure/command/title survive in `main.tex` and its `A1` ref is left as a live `\ref{}` rather than swept into the SI label-reconstruction block | Yes |
 | 2026-10-28 | All 7 SI `\ref`s in a real AMS revision (`hdd-slides-r1_manuscript.tex`) stayed undefined in `main.tex` after two `pdflatex` passes, although the SI label block was present. The converters emit `\clearpage` *before* `%% SI_BEGIN`, so it survived truncation and put the label block on an empty page that LaTeX never outputs; its `\label` writes never reached `main.aux`. Fixed in `strip_si` by dropping trailing `\clearpage`/`\cleardoublepage`/`\newpage` (§4.2). Also, `tests/test_main_si.tex` had the `\clearpage` *after* the sentinel, unlike real converter output, so the bug never showed in tests. The fixture now puts it before the sentinel, and `check_extract_main` asserts that no `\clearpage` comes before the label block; the check was confirmed to fail on the old code. Re-verified on the real paper: 0 undefined references | Yes |
 | 2026-10-28 | Folded the manual post-extraction steps into the script (§4.9): copy local `.cls`/`.sty`/`.bst` from the input dir or `ams/`/`agu/`; test-compile `main.tex` in `outdir` with `TEXINPUTS` unset (2–4 passes, until no rerun request), summarizing undefined refs/citations and overfull boxes, exit 1 on failure; prune `main_figures.*`/`main.aux`/`.out`/`.log`. New flags `--no-compile`, `--keep-intermediates`. Real paper (`hdd-slides-r1_manuscript.tex`): class copied, 37 pages in 3 passes, 0 undefined refs/citations, folder left with `main.tex`, `fig1–10.pdf`, `ametsocV6.1.cls`, `main.pdf`. New e2e test `check_compile_and_package` (support-file copy, commented `\usepackage` ignored, pruning, TEXINPUTS-only `.sty` → exit 1 with `main.log` kept); it caught a bug during development where a failed compile exited 0. Existing extract_main tests now pass `--no-compile` | Yes |
+| 2026-11-05 | Multi-panel figures came out too narrow in `main.tex`: `rewrite_figure_includes` kept the *first panel's* `[opts]` on the composite include, so a two-panel `0.49\linewidth` + `0.49\linewidth` figure became one `\includegraphics[width=0.49\linewidth]{fig8.pdf}` (half-width composite), plus a blank line where the second include had been. The unit test asserted that behavior. Fixed (§4.7 step 4): composite width is measured from the cropped figN.pdf relative to the harness `\textwidth`, ≥0.95 snapped to `\linewidth`; emptied lines are dropped; single-panel options unchanged. Tests: unmeasured → `\linewidth`, measured 0.6 → `0.6\linewidth`, measured 0.98 → `\linewidth`, no blank line. Real paper (`hdd-slides-r1_manuscript.tex`): figs 8 and 10 (was 0.49 each) → `\linewidth`, 0 undefined refs, 0 overfull boxes | Yes |

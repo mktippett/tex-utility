@@ -72,6 +72,8 @@ def run_extract_main(outdir):
 # ---------------------------------------------------------------------------
 
 def check_agu(text):
+    check('column env tags stripped', text, r'\\(begin|end)\{column\}', present=False)
+    check('column env content kept',  text, r'Left column environment content')
     # --- preamble metadata ---
     check('AGU docclass',              text, r'\\documentclass.*agujournal2019')
     check('journal name',              text, r'\\journalname\{Geophysical Research Letters\}')
@@ -190,6 +192,8 @@ def check_agu(text):
 # ---------------------------------------------------------------------------
 
 def check_manuscript(text):
+    check('column env tags stripped', text, r'\\(begin|end)\{column\}', present=False)
+    check('column env content kept',  text, r'Left column environment content')
     # --- preamble metadata ---
     check('AMS docclass',              text, r'\\documentclass\{ametsocV6\.1\}')
     check('author One aff a',          text, r'Author One,\\aff\{a\}')

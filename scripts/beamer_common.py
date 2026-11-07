@@ -388,6 +388,9 @@ def transform_content(content, figure_opts=None):
     content = re.sub(r'\\begin\{columns\}(\[[^\]]*\])?', '', content)
     content = re.sub(r'\\end\{columns\}', '', content)
     content = re.sub(r'\\column(\[[^\]]*\])?\{[^}]*\}', '', content)
+    # environment form \begin{column}[opt]{width} ... \end{column}
+    content = re.sub(r'\\begin\{column\}(\[[^\]]*\])?\{[^}]*\}', '', content)
+    content = re.sub(r'\\end\{column\}', '', content)
 
     # --- 3. Strip minipage tags (keep content) ------------------------------
     content = re.sub(r'\\begin\{minipage\}(\[[^\]]*\])?\{[^}]*\}', '', content)

@@ -131,6 +131,15 @@ Left column content.
 \column{0.5\textwidth}
 Right column content.
 \end{columns}
+% column environment form → strip tags, keep content
+\begin{columns}[T]
+  \begin{column}{0.6\textwidth}
+    Left column environment content.
+  \end{column}
+  \begin{column}[c]{0.38\textwidth}
+    Right column environment content.
+  \end{column}
+\end{columns}
 % font size commands should be stripped
 \small Small text here. \normalsize Normal again.
 \end{frame}

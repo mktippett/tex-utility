@@ -235,6 +235,19 @@ the `make_single_figure.sh` harness compile (cwd = outdir) and `main.tex`
 itself fail to find graphics referenced with the slide convention's
 relative paths.
 
+### 4.6c `\input`-ed table inlining (`inline_table_inputs`)
+
+Runs before `main.tex` is written, regardless of `outdir`. Each live
+`\input{file}` inside a `table`/`table*` float is replaced by the file's
+contents (stripped of surrounding whitespace), so `main.tex` is a snapshot of
+the generated tables, as `figN.pdf` is of the figures. The file resolves
+against the combined `.tex`'s directory, as given and then with `.tex`
+appended. Commented-out floats and `\input`s, and any `\input` outside a table
+float, are left alone. A file that isn't found produces a warning and its
+`\input` stays, which the test compile then reports. The converters
+deliberately keep the `\input` in the working manuscript
+(`beamer_to_ams_spec.md` §4.6 step 5b).
+
 ### 4.7 Figure extraction and rewriting
 
 1. `count_figure_envs` / `_live_figure_envs`: find
@@ -439,3 +452,4 @@ not touched.
 | 2026-11-05 | Multi-panel figures came out too narrow in `main.tex`: `rewrite_figure_includes` kept the *first panel's* `[opts]` on the composite include, so a two-panel `0.49\linewidth` + `0.49\linewidth` figure became one `\includegraphics[width=0.49\linewidth]{fig8.pdf}` (half-width composite), plus a blank line where the second include had been. The unit test asserted that behavior. Fixed (§4.7 step 4): composite width is measured from the cropped figN.pdf relative to the harness `\textwidth`, ≥0.95 snapped to `\linewidth`; emptied lines are dropped; single-panel options unchanged. Tests: unmeasured → `\linewidth`, measured 0.6 → `0.6\linewidth`, measured 0.98 → `\linewidth`, no blank line. Real paper (`hdd-slides-r1_manuscript.tex`): figs 8 and 10 (was 0.49 each) → `\linewidth`, 0 undefined refs, 0 overfull boxes | Yes |
 | 2026-11-05 | Test compile now uses the journal system's engine (§4.9.2): new `choose_engine` / `ENGINE_BY_CLASS_PREFIX` (`ametsoc` → `xelatex`, else `pdflatex`) and `--engine auto\|pdflatex\|xelatex`; `compile_main(out_tex, engine)`; messages name the engine. Prompted by a user comparing their pdflatex `main.pdf` with AMS's Editorial Manager PDF of JAMC-D-26-0206_R1: different spacing and line-number font, reply line numbers off by up to 3. Root cause verified by reproducing the system PDF exactly with a local xelatex build. New unit test `check_choose_engine_unit` (AMS → xelatex; AGU/article/commented-out class/no class → pdflatex); `check_compile_and_package` regex updated for the engine in the summary line. Real paper re-run: `Compiled main.pdf with xelatex (37 pages, 3 passes …): 0 undefined ref(s), 0 undefined citation(s)`; all 37 pages' first/last line numbers match the system PDF. Side note recorded in README: the combined main+SI PDF can still break main-text pages differently from `main.pdf`, because cropped `figN.pdf` composites are a fraction of a percent smaller than the original plots (seen: lines 311–312 moved across a page). Line numbers are unaffected, and the SI split is unaffected | Yes |
 | 2026-11-05 | AMS→xelatex default marked **unconfirmed** in §4.9.2 rationale, the `ENGINE_BY_CLASS_PREFIX` comment, the module docstring, the `--engine` help text and the README (new Quick-reference warning "AMS + XeLaTeX is unconfirmed"). AMS documents nothing about XeLaTeX and its template README says pdflatex; the evidence is one system PDF (JAMC-D-26-0206_R1). User emailed AMS 2026-11-05. No behavior change. **Open item:** on AMS's reply, either drop the caveats or switch `ametsoc` back to `pdflatex` | Yes |
+| 2026-11-08 | New `inline_table_inputs` (§4.6c), GitHub issue #1: the converters now keep `\input{file}` inside table floats, and `main.tex` compiles in `outdir` where those files don't exist, so the contents are frozen into `main.tex` at submission. Unit test `check_inline_table_inputs_unit`. Verified on a scratch deck, AGU (pdflatex) and AMS (xelatex): 2 tables inlined, no `\input` left, test compile clean with `TEXINPUTS` unset | Yes |

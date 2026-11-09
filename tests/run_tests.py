@@ -863,6 +863,88 @@ def check_rebase_paths_unit():
     check('rebase leaves absolute', new_text, r'\{/abs/path/b\.pdf\}')
 
 
+def check_input_tables_unit():
+    """GitHub issue #1: \\captionof{table} + \\input becomes a table float that
+    keeps the \\input; slide-only \\resizebox wrappers around tables go."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import beamer_common as bc
+
+    float_re = (r'\\begin\{table\}\[h\]\n  \\centering\n  \\caption\{Cap\}\n'
+                r'  \\label\{tab:a\}\n  \\input\{t\.tex\}\n\\end\{table\}')
+    cap = '\\captionof{table}{Cap}\\label{tab:a}\n'
+    inp = '\\input{t.tex}\n'
+    box = '\\resizebox{0.55\\textwidth}{!}{\\input{t.tex}}\n'
+
+    check('input table: caption before', bc.transform_content(cap + inp), float_re)
+    check('input table: caption after', bc.transform_content(inp + cap), float_re)
+    for name, src in [('before', cap + box), ('after', box + cap)]:
+        out = bc.transform_content(src)
+        check(f'input table: resizebox {name}', out, float_re)
+        check(f'input table: resizebox {name} dropped', out, r'resizebox', present=False)
+
+    # The issue's frame shape: minipages, with prose following the table
+    out = bc.transform_content(
+        '\\begin{minipage}[t]{0.52\\linewidth}\n' + cap + inp +
+        '\\end{minipage}\\hfill\n\\begin{minipage}[t]{0.45\\linewidth}\n'
+        'Prose after.\n\\end{minipage}\n')
+    check('input table: minipage float', out, float_re)
+    check('input table: prose outside float', out, r'\\end\{table\}\s*Prose after')
+
+    out = bc.transform_content('\\captionof{table}{Cap}\n\nText between.\n\n' + inp)
+    check('input table: non-adjacent not wrapped', out, r'\\begin\{table\}', present=False)
+    out = bc.transform_content('Some text.\n' + inp)
+    check('input alone: no float', out, r'\\begin\{table\}', present=False)
+    out = bc.transform_content('\\captionof{figure}{Cap}\n' + inp)
+    check('input + figure caption: no table float', out, r'\\begin\{table\}', present=False)
+
+    out = bc.transform_content(
+        cap + '\\resizebox{0.5\\textwidth}{!}{\\begin{tabular}{cc}a&b\\end{tabular}}\n')
+    check('tabular resizebox: float outermost', out,
+          r'\A\s*\\begin\{table\}\[h\]\n  \\centering\n  \\caption\{Cap\}\n'
+          r'  \\label\{tab:a\}\n\\begin\{tabular\}')
+    check('tabular resizebox: dropped', out, r'resizebox', present=False)
+
+    out = bc._restructure_tables('\\resizebox{2in}{!}{\\includegraphics{a.pdf}}')
+    check('graphics resizebox untouched', out,
+          r'\\resizebox\{2in\}\{!\}\{\\includegraphics\{a\.pdf\}\}')
+
+    existing = ('\\begin{table}\\resizebox{2in}{!}{\\begin{tabular}{c}a\\end{tabular}}'
+                '\\end{table}')
+    if bc._restructure_tables(existing) != existing:
+        _failures.append('  FAIL  existing table float not passed through unchanged')
+
+
+def check_inline_table_inputs_unit():
+    """extract_main freezes \\input-ed tables into main.tex."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    import extract_main as em
+
+    with tempfile.TemporaryDirectory() as td:
+        table = '\\begin{tabular}{c}\n\\textbf{a} \\\\ 1\\%\n\\end{tabular}\n'
+        (Path(td) / 'with_ext.tex').write_text(table)
+        (Path(td) / 'no_ext.tex').write_text(table)
+        sample = (
+            '\\input{outside.tex}\n'
+            '\\begin{table}\n\\input{with_ext.tex}\n\\end{table}\n'
+            '\\begin{table*}\n\\input{no_ext}\n\\end{table*}\n'
+            '\\begin{table}\n% \\input{commented.tex}\n\\end{table}\n'
+            '% \\begin{table}\\input{dead.tex}\\end{table}\n'
+            '\\begin{table}\n\\input{gone.tex}\n\\end{table}\n')
+        new_text, n, missing = em.inline_table_inputs(sample, td)
+
+    if n != 2:
+        _failures.append(f'  FAIL  inline_table_inputs: expected 2 inlined, got {n}')
+    if missing != ['gone.tex']:
+        _failures.append(f'  FAIL  inline_table_inputs: missing was {missing}')
+    if new_text.count('\\textbf{a} \\\\ 1\\%') != 2:
+        _failures.append('  FAIL  inline_table_inputs: table contents not literal')
+    check('inline: resolved inputs gone', new_text, r'\\input\{(with_ext|no_ext)', present=False)
+    check('inline: outside float kept', new_text, r'\\input\{outside\.tex\}')
+    check('inline: commented kept', new_text, r'% \\input\{commented\.tex\}')
+    check('inline: commented float kept', new_text, r'\\input\{dead\.tex\}')
+    check('inline: missing kept', new_text, r'\\input\{gone\.tex\}')
+
+
 def check_choose_engine_unit():
     """Test-compile engine follows the journal's submission system: xelatex
     for the AMS class (AMS Editorial Manager builds with XeLaTeX), pdflatex
@@ -1016,6 +1098,8 @@ def main():
 
     # --- extract_main.py: \includegraphics rewrite (unit test) ---
     unit_sections = [
+        ('input tables (unit)', check_input_tables_unit),
+        ('extract_main inline tables (unit)', check_inline_table_inputs_unit),
         ('extract_main figure rewrite (unit)', check_figure_rewrite_unit),
         ('restructure_figures passthrough (unit)', check_restructure_figures_passthrough_unit),
         ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),

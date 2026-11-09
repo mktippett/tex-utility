@@ -363,6 +363,49 @@ def rebase_graphics_paths(text, src_dir, outdir):
     return _INCLUDEGRAPHICS_PATH_RE.sub(repl, text), n_rebased
 
 
+_TABLE_ENV_RE = re.compile(r'\\begin\{(table\*?)\}.*?\\end\{\1\}', re.DOTALL)
+_INPUT_CMD_RE = re.compile(r'\\input\s*\{([^{}]+)\}')
+
+
+def inline_table_inputs(text, src_dir):
+    """
+    Replace each live \\input{file} inside a table float with the file's
+    contents, so main.tex freezes the generated table at submission (as
+    figures are frozen into figN.pdf). The file resolves against src_dir,
+    trying the name as given and then with .tex appended. \\input outside a
+    table float, or commented out, is left alone.
+
+    Returns (new_text, n_inlined, missing); missing lists files not found,
+    whose \\input is left in place for the test compile to report.
+    """
+    n_inlined = 0
+    missing = []
+
+    def repl_env(env_m):
+        nonlocal n_inlined
+        env = env_m.group(0)
+        if _is_commented(text, env_m.start()):
+            return env
+
+        def repl_input(m):
+            nonlocal n_inlined
+            if _is_commented(env, m.start()):
+                return m.group(0)
+            name = m.group(1).strip()
+            path = Path(src_dir) / name
+            src = next((p for p in (path, Path(str(path) + '.tex'))
+                        if p.is_file()), None)
+            if src is None:
+                missing.append(name)
+                return m.group(0)
+            n_inlined += 1
+            return src.read_text(encoding='utf-8').strip()
+
+        return _INPUT_CMD_RE.sub(repl_input, env)
+
+    return _TABLE_ENV_RE.sub(repl_env, text), n_inlined, missing
+
+
 def _is_commented(text, pos):
     """True if position `pos` is preceded on its line by an unescaped '%'
     (i.e. `pos` falls inside a LaTeX comment)."""
@@ -792,6 +835,16 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
         if n_rebased:
             print(f'Rebased {n_rebased} relative \\includegraphics path(s) '
                   f'to resolve from {outdir}/')
+
+    # \input-ed tables are frozen here: a submission is a snapshot, and
+    # main.tex compiles in outdir, where the table files don't exist.
+    main_text, n_inlined, missing_tables = inline_table_inputs(
+        main_text, combined_tex.parent)
+    if n_inlined:
+        print(f'Inlined {n_inlined} \\input table(s) into main.tex')
+    for name in missing_tables:
+        print(f'Warning: \\input table file not found: {name} '
+              f'(left as \\input)', file=sys.stderr)
 
     outdir.mkdir(parents=True, exist_ok=True)
     out_tex.write_text(main_text, encoding='utf-8')

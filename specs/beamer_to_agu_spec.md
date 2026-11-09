@@ -148,6 +148,10 @@ floats by the shared `_restructure_tables` (same placement/centering options
 as figures; adjacent `\caption{}` before or after the tabular attached and
 emitted above it — see `beamer_to_ams_spec.md` §4.6 step 6b).
 
+`\captionof{table}` adjacent to `\input{file}` is wrapped by the shared
+`_restructure_input_tables`, keeping the `\input` — see
+`beamer_to_ams_spec.md` §4.6 step 5b.
+
 ### 4.6 Passthrough filter
 
 `build_event_list(..., keep_bibliographystyle=False)` passes through verbatim
@@ -338,6 +342,7 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | No `\institute{}` in source (and no `\inst{}`) | All authors share one `\affiliation{1}{Department, Institution, City, Country}` placeholder |
 | No `\author{}` (or empty) | Placeholder author `First Last` (corresponding author `F. Last`), from `_parse_inst_blocks` (2026-10-19) |
 | Bare `tabular` with adjacent `\captionof{table}{...}` | Wrapped in `\begin{table}` with caption above and `\label{}` attached (`_restructure_tables`, shared) |
+| `\input{file}` adjacent to `\captionof{table}{...}`, optionally inside `\resizebox` | Wrapped in `\begin{table}` keeping the bare `\input` (`_restructure_input_tables`, shared); `extract_main.py` inlines it |
 | Citations in abstract / PLS / key points | Remapped to apacite (separate pass; extracted front matter bypasses the body-wide remap) |
 | `\bibliography{...}` inside a frame | Stripped by `transform_content`; postamble uses bib name extracted from source |
 | `\bibliographystyle{...}` inside a frame | Stripped by `transform_content`; prevents duplicate `\bibstyle` BibTeX error |
@@ -411,3 +416,4 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | 2026-10-15 | Shared fix: section titles with nested braces (e.g. `\subsection{BSS$_\text{c}$}`) were truncated at the first `}` — see `beamer_to_ams_spec.md` sync log (2026-10-15). `check_agu` asserts the nested-brace subsection survives intact | Yes |
 | 2026-10-19 | (a) Shared brace-nesting fixes (`_rewrite_command`: `\framesubtitle`, nested `\alert`/`\only`/`\textcolor`/…, two-argument `\setlength`) — see `beamer_to_ams_spec.md` sync log (2026-10-19). (b) Fixed text-only SI compile failure: with zero SI figures and tables every checklist item was commented out, leaving an empty `enumerate` ("Something's wrong--perhaps a missing \item"); present since the 2026-05-06 dynamic checklist. `_make_si_checklist` now comments out the whole block in that case. **Regression test added same day**: `check_text_only_si` (registered in `unit_sections`) — confirmed to fail on pre-fix code | Yes |
 | 2026-10-19 | Fixed crash on a deck with no `\author{}`: `_parse_authors_affiliations_agu` indexed `author_parts[-1]` on an empty list (`IndexError`; repro `~/tex/papers/CFSv2_monthly_climatology/slides.tex`, and also any `_manuscript.tex` fed back in, since those use `\authors`). Fixed in shared `_parse_inst_blocks` (placeholder `First Last` author), so AMS gains a placeholder too — see `beamer_to_ams_spec.md` sync log. **Regression test added same day** (`check_noinst_fallback_unit`) | Yes |
+| 2026-11-08 | Shared fix for GitHub issue #1: `\input`-ed tables now get a float, keeping the `\input` — see `beamer_to_ams_spec.md` sync log (2026-11-08) | Yes |

@@ -370,6 +370,19 @@ Avoid wrapping `\includegraphics` in explicit `\begin{figure}` inside
 Beamer frames — the converter passes existing figure environments through
 unchanged, which is correct but means your Beamer captions won't migrate.
 
+### Tables
+
+A generated table needs `\captionof{table}` right next to its `\input`, or it
+gets no float. A slide-sizing `\resizebox` around the table is dropped.
+
+```latex
+\captionof{table}{Pattern correlation.}\label{tab:corr}
+\input{corr_table.tex}
+```
+
+The manuscript keeps the `\input`, so it follows the generated file.
+`extract_main.py` freezes the table into `main.tex` at submission.
+
 ### Lists → prose
 
 Both `enumerate` and `itemize` lists are flattened to prose paragraphs.
@@ -547,6 +560,8 @@ main text, and `main-and-si-SI.pdf` for the SI.
 - Bare `tabular`/`tabular*`/`tabularx` blocks are wrapped in `\begin{table}`,
   with an adjacent `\caption{}` (immediately before or after the tabular) and
   its `\label{}` attached; the caption is placed above the tabular
+- `\input{file}` next to `\captionof{table}{...}` is wrapped the same way, and
+  the `\input` is kept
 - `\captionof{figure}{...}` / `\captionof{table}{...}` are converted to `\caption{...}`
 - `\fig{path}` (Beamer shorthand macro) expanded to `\includegraphics{path}`
 - `enumerate`/`itemize` lists are flattened to prose sentences

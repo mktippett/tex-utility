@@ -396,8 +396,16 @@ def transform_content(content, figure_opts=None):
     content = re.sub(r'\\begin\{minipage\}(\[[^\]]*\])?\{[^}]*\}', '', content)
     content = re.sub(r'\\end\{minipage\}', '', content)
 
-    # --- 4. Figures: restructure \includegraphics + \captionof/caption ------
+    # --- 3b. \input-ed tables: needs \captionof's type, so before step 4 -----
     opts = figure_opts or {}
+    content = _restructure_input_tables(
+        content,
+        placement=opts.get('placement', 'h'),
+        centering=opts.get('centering', True),
+        caption_tcignore=opts.get('caption_tcignore', False),
+    )
+
+    # --- 4. Figures: restructure \includegraphics + \captionof/caption ------
     content = _restructure_figures(
         content,
         placement=opts.get('placement', 'h'),
@@ -553,6 +561,9 @@ def _restructure_figures(content, placement='h', centering=True,
 _TABULAR_BEGIN_RE = re.compile(r'\\begin\{(tabular\*?|tabularx)\}')
 _TABLE_BEGIN_RE = re.compile(r'\\begin\{table\*?\}')
 _TABLE_END_RE = re.compile(r'\\end\{table\*?\}')
+_RESIZEBOX_RE = re.compile(r'\\resizebox\*?(?![a-zA-Z])')
+_CAPTIONOF_TABLE_RE = re.compile(r'\\captionof\s*\{table\}')
+_INPUT_RE = re.compile(r'\\input\s*\{[^{}]+\}')
 
 
 def _find_env_end(text, start, env):
@@ -568,6 +579,173 @@ def _find_env_end(text, start, env):
         if depth == 0:
             return m.end()
     return len(text)
+
+
+def _inside_table_float(text, i):
+    r"""True if text[i] falls inside an already-open \begin{table}."""
+    head = text[:i]
+    return (len(_TABLE_BEGIN_RE.findall(head))
+            > len(_TABLE_END_RE.findall(head)))
+
+
+def _emit_table_float(body, caption_content, label_cmd, placement, centering,
+                      caption_tcignore):
+    r"""Build a table float: caption above body (journal convention)."""
+    placement_str = f'[{placement}]' if placement else ''
+    tbl = f'\n\\begin{{table}}{placement_str}\n'
+    if centering:
+        tbl += '  \\centering\n'
+    if caption_content is not None:
+        caption_cmd = r'\caption{' + caption_content + '}'
+        if caption_tcignore:
+            tbl += '%TC:ignore\n  ' + caption_cmd + '\n%TC:endignore\n'
+        else:
+            tbl += '  ' + caption_cmd + '\n'
+    if label_cmd:
+        tbl += '  ' + label_cmd + '\n'
+    return tbl + body + '\n\\end{table}\n'
+
+
+def _parse_resizebox(text, i):
+    r"""
+    If text[i:] starts \resizebox{w}{h}{body}, return (body, end) with end the
+    index just past the command; otherwise None.
+    """
+    m = _RESIZEBOX_RE.match(text, i)
+    if not m:
+        return None
+    pos = m.end()
+    arg = None
+    for _ in range(3):
+        while pos < len(text) and text[pos] in ' \t\n':
+            pos += 1
+        if pos >= len(text) or text[pos] != '{':
+            return None
+        arg, pos = _extract_brace_group(text, pos)
+    return arg, pos
+
+
+def _unwrap_tabular_resizebox(text):
+    r"""
+    Replace \resizebox{w}{h}{\begin{tabular}...} with the tabular: the sizing
+    is for slides, and left in place it would enclose the table float.  Other
+    \resizebox uses, and any inside an existing table float, are untouched.
+    """
+    result = []
+    pos = 0
+    while True:
+        m = _RESIZEBOX_RE.search(text, pos)
+        if m is None:
+            result.append(text[pos:])
+            return ''.join(result)
+        box = _parse_resizebox(text, m.start())
+        if (box and _TABULAR_BEGIN_RE.match(box[0].strip())
+                and not _inside_table_float(text, m.start())):
+            result.append(text[pos:m.start()])
+            result.append(box[0].strip())
+            pos = box[1]
+        else:
+            result.append(text[pos:m.end()])
+            pos = m.end()
+
+
+def _parse_captionof_table(text, i):
+    r"""
+    If text[i:] starts \captionof{table}{...}, return _parse_caption's
+    (caption_content, label_cmd, end); otherwise None.
+    """
+    m = _CAPTIONOF_TABLE_RE.match(text, i)
+    if not m:
+        return None
+    pos = m.end()
+    while pos < len(text) and text[pos] in ' \t\n':
+        pos += 1
+    prefix = r'\caption'
+    parsed = _parse_caption(prefix + text[pos:], 0)
+    if parsed is None:
+        return None
+    caption_content, label_cmd, end = parsed
+    return caption_content, label_cmd, pos + end - len(prefix)
+
+
+def _parse_table_input(text, i):
+    r"""
+    If text[i:] starts \input{file}, or \resizebox{w}{h}{\input{file}}, return
+    (input_cmd, end) with the \resizebox dropped; otherwise None.
+    """
+    m = _INPUT_RE.match(text, i)
+    if m:
+        return m.group(0), m.end()
+    box = _parse_resizebox(text, i)
+    if box:
+        m = _INPUT_RE.fullmatch(box[0].strip())
+        if m:
+            return m.group(0), box[1]
+    return None
+
+
+def _restructure_input_tables(content, placement='h', centering=True,
+                              caption_tcignore=False):
+    r"""
+    Wrap \captionof{table}{...}[\label{}] + \input{file} in a table float,
+    keeping the \input so the manuscript follows the generated table file
+    (extract_main.py inlines it at submission).  The \input may come
+    immediately before or after the caption and may be wrapped in a
+    slide-sizing \resizebox, which is dropped.
+
+    Runs before _restructure_figures converts \captionof to \caption, because
+    the caption's type is what identifies the \input as a table.  An \input
+    with no adjacent table caption is left alone.
+
+    placement / centering / caption_tcignore behave as in
+    _restructure_figures.
+    """
+    text = content
+    result = []
+    pos = 0
+
+    while True:
+        m = _CAPTIONOF_TABLE_RE.search(text, pos)
+        if m is None:
+            result.append(text[pos:])
+            return ''.join(result)
+
+        parsed = _parse_captionof_table(text, m.start())
+        if parsed is None or _inside_table_float(text, m.start()):
+            result.append(text[pos:m.end()])
+            pos = m.end()
+            continue
+        caption_content, label_cmd, cap_end = parsed
+
+        # \input immediately AFTER the caption
+        ws_m = re.match(r'\s*', text[cap_end:])
+        body = _parse_table_input(text, cap_end + ws_m.end())
+        pre = text[pos:m.start()]
+        end_pos = None
+        if body:
+            input_cmd, end_pos = body
+        else:
+            # \input immediately BEFORE the caption (try the outer \resizebox
+            # first, since an \input inside one is also the last \input)
+            trimmed = pre.rstrip()
+            for cmd in (r'\resizebox', r'\input'):
+                idx = trimmed.rfind(cmd)
+                body = _parse_table_input(trimmed, idx) if idx != -1 else None
+                if body and body[1] == len(trimmed):
+                    input_cmd, end_pos = body[0], cap_end
+                    pre = trimmed[:idx]
+                    break
+
+        if end_pos is None:
+            result.append(text[pos:m.end()])
+            pos = m.end()
+            continue
+
+        result.append(pre)
+        result.append(_emit_table_float(
+            '  ' + input_cmd, caption_content, label_cmd, placement,
+            centering, caption_tcignore))
+        pos = end_pos
 
 
 def _restructure_tables(content, placement='h', centering=True,
@@ -586,7 +764,7 @@ def _restructure_tables(content, placement='h', centering=True,
     placement / centering / caption_tcignore behave as in
     _restructure_figures.
     """
-    text = content
+    text = _unwrap_tabular_resizebox(content)
     n = len(text)
     result = []
     pos = 0
@@ -635,21 +813,9 @@ def _restructure_tables(content, placement='h', centering=True,
             if parsed:
                 caption_content, label_cmd, end_pos = parsed
 
-        placement_str = f'[{placement}]' if placement else ''
-        tbl = f'\n\\begin{{table}}{placement_str}\n'
-        if centering:
-            tbl += '  \\centering\n'
-        if caption_content is not None:
-            caption_cmd = r'\caption{' + caption_content + '}'
-            if caption_tcignore:
-                tbl += '%TC:ignore\n  ' + caption_cmd + '\n%TC:endignore\n'
-            else:
-                tbl += '  ' + caption_cmd + '\n'
-        if label_cmd:
-            tbl += '  ' + label_cmd + '\n'
-        tbl += tabular_block + '\n\\end{table}\n'
-
-        result.append(tbl)
+        result.append(_emit_table_float(
+            tabular_block, caption_content, label_cmd, placement, centering,
+            caption_tcignore))
         pos = end_pos
 
     return ''.join(result)

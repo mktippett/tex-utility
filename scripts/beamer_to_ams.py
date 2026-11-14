@@ -25,7 +25,7 @@ from beamer_common import (
     _extract_brace_group,
     _extract_bib_file,
     _extract_bib_style,
-    extract_passthrough_packages,
+    passthrough_preamble_block,
     preprocess_body,
     build_event_list,
     extract_abstract,
@@ -449,7 +449,7 @@ def convert(input_path, output_path):
             if si_body.strip():
                 manuscript_body += '\n\n' + si_body
 
-    pkg_ams = extract_passthrough_packages(src) or r'\usepackage{amsmath,amssymb}'
+    pkg_ams = passthrough_preamble_block(src, r'\usepackage{amsmath,amssymb}')
     preamble = _build_preamble(title_text, authors_block, affiliation_block, abstract_text,
                                statement_block, pkg_ams=pkg_ams)
     out = preamble + '\n' + manuscript_body + '\n' + postamble

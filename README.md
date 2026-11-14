@@ -133,6 +133,7 @@ If `main.tex` doesn't compile, it prints the LaTeX error and exits 1.
 | `--engine pdflatex\|xelatex` | you want a different engine from the default (xelatex for the AMS class, which matched AMS's system PDF on one paper but is not confirmed by AMS; pdflatex otherwise) |
 | `--no-compile` | you want to skip the test compile |
 | `--keep-intermediates` | you're debugging the figure or compile step |
+| `--allow-todo` | you want a preview build although `\TODO{}`s remain (by default `extract_main` refuses and lists their lines) |
 
 Gotchas:
 - Rerunning into the same folder doesn't delete old files. If you dropped a
@@ -564,6 +565,10 @@ main text, and `main-and-si-SI.pdf` for the SI.
   the `\input` is kept
 - `\captionof{figure}{...}` / `\captionof{table}{...}` are converted to `\caption{...}`
 - `\fig{path}` (Beamer shorthand macro) expanded to `\includegraphics{path}`
+- User macros from the deck preamble (`\newcommand`, `\providecommand`,
+  `\DeclareMathOperator`) are copied into the manuscript preamble, e.g. a red
+  `\TODO{}`. Not copied: `\renewcommand`, `\fig`, and definitions that use
+  Beamer commands (listed in a `Note:` on stderr)
 - `enumerate`/`itemize` lists are flattened to prose sentences
 - Beamer overlay and layout commands (`\pause`, `\only`, `\alert`, `\columns`, etc.) are stripped
 - `\renewcommand\thetable`, `\setcounter{table}`, `\clearpage` passed through verbatim

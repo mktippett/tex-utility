@@ -123,6 +123,21 @@ every SI `\ref` stays undefined in `main.tex`. The page break only separated
 the main text from the SI, so there is no reason to keep it once the SI is
 gone.
 
+### 4.2b TODO gate (`find_todos`; added 2026-11-14)
+
+Runs on the main text (after SI stripping, so the main text's line numbers
+equal the input's) before anything is written. Counts live `\TODO` / `\todo`
+(`_TODO_RE`, not followed by a letter or `@`) after `\begin{document}`; the
+preamble definition and uses inside `%` comments (`_is_commented`) don't
+count, and SI uses are gone with the SI. Any hit → exit with
+`FAIL: N \TODO{} remain in the main text (input line(s) a, b, ...). ...
+Aborting -- nothing written.` (first 10 lines listed). `--allow-todo`
+(`allow_todo=True`) prints the same count as a stderr `Warning:` and
+continues, for preview builds. Rationale: the converters now carry the
+deck's red `\TODO` macro into the draft (`beamer_to_agu_spec.md` §4.6), so
+open reminders are visible while drafting; this is the point where they must
+be gone. The SI file is not produced here, so its TODOs are not checked.
+
 ### 4.3 `.aux` parsing (`parse_aux_labels`)
 
 Line-by-line regex `\newlabel\{(label)\}\{\{(ref)\}\{(page)\}` → `{label:
@@ -403,6 +418,7 @@ not touched.
 | Situation | Handling |
 |-----------|----------|
 | No SI boundary found | Abort, nothing written; error message suggests `--no-si` |
+| Live `\TODO{}`/`\todo{}` in the main text (§4.2b) | Abort, nothing written, lines listed; `--allow-todo` downgrades to a warning |
 | `--no-si` | Boundary detection and SI stripping skipped; ref flattening (no-op without S-labels), path rebasing, `.bbl` inlining, and figure extraction still run |
 | Relative `\includegraphics` paths | Rebased to resolve from `outdir` (§4.6b); absolute paths untouched |
 | `.aux` missing | SI refs left as `\ref{...}` (will render `??`, no reconstruction block emitted); warning emitted |
@@ -453,3 +469,4 @@ not touched.
 | 2026-11-05 | Test compile now uses the journal system's engine (§4.9.2): new `choose_engine` / `ENGINE_BY_CLASS_PREFIX` (`ametsoc` → `xelatex`, else `pdflatex`) and `--engine auto\|pdflatex\|xelatex`; `compile_main(out_tex, engine)`; messages name the engine. Prompted by a user comparing their pdflatex `main.pdf` with AMS's Editorial Manager PDF of JAMC-D-26-0206_R1: different spacing and line-number font, reply line numbers off by up to 3. Root cause verified by reproducing the system PDF exactly with a local xelatex build. New unit test `check_choose_engine_unit` (AMS → xelatex; AGU/article/commented-out class/no class → pdflatex); `check_compile_and_package` regex updated for the engine in the summary line. Real paper re-run: `Compiled main.pdf with xelatex (37 pages, 3 passes …): 0 undefined ref(s), 0 undefined citation(s)`; all 37 pages' first/last line numbers match the system PDF. Side note recorded in README: the combined main+SI PDF can still break main-text pages differently from `main.pdf`, because cropped `figN.pdf` composites are a fraction of a percent smaller than the original plots (seen: lines 311–312 moved across a page). Line numbers are unaffected, and the SI split is unaffected | Yes |
 | 2026-11-05 | AMS→xelatex default marked **unconfirmed** in §4.9.2 rationale, the `ENGINE_BY_CLASS_PREFIX` comment, the module docstring, the `--engine` help text and the README (new Quick-reference warning "AMS + XeLaTeX is unconfirmed"). AMS documents nothing about XeLaTeX and its template README says pdflatex; the evidence is one system PDF (JAMC-D-26-0206_R1). User emailed AMS 2026-11-05. No behavior change. **Open item:** on AMS's reply, either drop the caveats or switch `ametsoc` back to `pdflatex` | Yes |
 | 2026-11-08 | New `inline_table_inputs` (§4.6c), GitHub issue #1: the converters now keep `\input{file}` inside table floats, and `main.tex` compiles in `outdir` where those files don't exist, so the contents are frozen into `main.tex` at submission. Unit test `check_inline_table_inputs_unit`. Verified on a scratch deck, AGU (pdflatex) and AMS (xelatex): 2 tables inlined, no `\input` left, test compile clean with `TEXINPUTS` unset | Yes |
+| 2026-11-14 | New TODO gate (§4.2b): `find_todos`, `--allow-todo`. Companion to the converters now carrying user macros (incl. `\TODO`) into the manuscript preamble. Test `check_todo_gate` (e2e): 2 live uses at lines 4 and 6 reported, commented and SI uses ignored, nothing written; `--allow-todo` warns and writes `main.tex`. Real paper: `slides-clim-v1` AMS conversion → `FAIL: 3 \TODO{} remain ... (input line(s) 326, 339, 343)` | Yes |

@@ -67,6 +67,31 @@ def run_extract_main(outdir):
     return True
 
 
+def _body(text):
+    """Text after \\begin{document} (the preamble now carries user macro
+    definitions, which may legitimately contain \\textcolor etc.)."""
+    return text.split(r'\begin{document}', 1)[-1]
+
+
+def check_user_macros(text):
+    """Deck preamble macro definitions carried into the manuscript preamble
+    (shared by both converters)."""
+    pre = text.split(r'\begin{document}', 1)[0]
+    check('macro: TODO def carried', pre,
+          re.escape(r'\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO:} #1}}'))
+    check('macro: multi-line opt-arg def verbatim', pre,
+          re.escape('\\newcommand{\\vect}[2][x]{%\n  \\mathbf{#1}_{#2}}'))
+    check('macro: starred bare-name def', pre, re.escape(r'\newcommand*\Rset{\mathbb{R}}'))
+    check('macro: DeclareMathOperator*', pre, re.escape(r'\DeclareMathOperator*{\argmax}{arg\,max}'))
+    check('macro: commented def ignored', pre, r'commentedmacro', present=False)
+    check('macro: alert-using def skipped', pre, r'\\hl\b', present=False)
+    check('macro: Beamer-only def skipped', pre, r'startappendix|framenumber', present=False)
+    check('macro: \\fig def not carried', pre, r'\\newcommand\{\\fig\}', present=False)
+    check('macro: defs after packages', pre,
+          r'\\usepackage\{amsmath\}[\s\S]*\\newcommand\{\\TODO\}')
+    check('macro: TODO use kept in body', _body(text), r'\\TODO\{check this claim\}')
+
+
 # ---------------------------------------------------------------------------
 # AGU checks
 # ---------------------------------------------------------------------------
@@ -122,8 +147,9 @@ def check_agu(text):
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
     check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
-    check('beamer markup fully unwrapped', text,
+    check('beamer markup fully unwrapped', _body(text),
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
+    check_user_macros(text)
     check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
     check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
     check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
@@ -271,8 +297,9 @@ def check_manuscript(text):
     check('methods section',           text, r'\\section\{Methods\}')
     check('results section',           text, r'\\section\{Results\}')
     check('nested-brace subsection',   text, r'\\subsection\{BSS\$_\\text\{c\}\$ by lead\}')
-    check('beamer markup fully unwrapped', text,
+    check('beamer markup fully unwrapped', _body(text),
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
+    check_user_macros(text)
     check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
     check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
     check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
@@ -785,6 +812,46 @@ Main text cites \cite{k1} and refers to Figure~\ref{fig:si1}.
 """
 
 
+_TODO_COMBINED = r"""\documentclass{article}
+\newcommand{\TODO}[1]{\textcolor{red}{#1}}
+\begin{document}
+Main text. \TODO{fix this}
+% \TODO{commented, not counted}
+Second \TODO{one}.
+%% SI_BEGIN
+\section*{Supporting Information}
+SI \TODO{not counted: stripped with the SI}
+\end{document}
+"""
+
+
+def check_todo_gate():
+    """extract_main refuses to write anything while live \\TODO{} uses remain
+    in the main text (preamble definition, comments and SI don't count);
+    --allow-todo builds anyway with a warning."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        src = Path(tmpdir) / 'combined.tex'
+        src.write_text(_TODO_COMBINED)
+        base = [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'), str(src),
+                '--no-figures', '--no-bib', '--no-compile']
+        out = Path(tmpdir) / 'SUBMIT'
+        r = subprocess.run(base + ['--outdir', str(out)], capture_output=True, text=True)
+        if r.returncode == 0:
+            _failures.append('  FAIL  TODO gate: expected nonzero exit')
+        check('TODO gate: verdict names count and lines', r.stderr,
+              r'FAIL: 2 \\TODO\{\} remain in the main text \(input line\(s\) 4, 6\)')
+        if out.exists() and any(out.iterdir()):
+            _failures.append('  FAIL  TODO gate: files written despite abort')
+        out2 = Path(tmpdir) / 'SUBMIT2'
+        r = subprocess.run(base + ['--outdir', str(out2), '--allow-todo'],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            _failures.append(f'  FAIL  TODO gate --allow-todo exited {r.returncode}:\n{r.stderr}')
+        check('TODO gate: --allow-todo warns', r.stderr, r'Warning: 2 \\TODO\{\} remain')
+        if not (out2 / 'main.tex').exists():
+            _failures.append('  FAIL  TODO gate --allow-todo: main.tex not written')
+
+
 def _run_package(src, outdir, env=None):
     return subprocess.run(
         [PYTHON, str(SCRIPTS_DIR / 'extract_main.py'),
@@ -1107,6 +1174,7 @@ def main():
         ('single appendix + --no-si (e2e)', check_appendix_paths),
         ('text-only SI checklist (e2e)', check_text_only_si),
         ('graphics path rebasing (unit)', check_rebase_paths_unit),
+        ('extract_main TODO gate (e2e)', check_todo_gate),
         ('test-compile engine choice (unit)', check_choose_engine_unit),
         ('extract_main support files + test compile (e2e)', check_compile_and_package),
     ]

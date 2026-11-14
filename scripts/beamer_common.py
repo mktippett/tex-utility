@@ -7,6 +7,7 @@ beamer_to_ams.py (AMS) and beamer_to_agu.py (AGU).
 """
 
 import re
+import sys
 
 
 # ---------------------------------------------------------------------------
@@ -910,6 +911,108 @@ def extract_passthrough_packages(src):
                 seen.add(s)
                 lines.append(s)
     return '\n'.join(lines)
+
+
+# User macro definitions carried from the Beamer preamble into the manuscript
+# preamble by extract_passthrough_macros.  \renewcommand is deliberately not
+# carried: in real decks it only retunes Beamer/template internals
+# (\thesection etc.), which would override the journal class's own.
+_MACRO_DEF_RE = re.compile(
+    r'\\(newcommand|providecommand|DeclareMathOperator)(\*?)\s*'
+    r'(?:\{\s*(\\[A-Za-z@]+)\s*\}|(\\[A-Za-z@]+))'
+)
+# A definition whose text mentions any of these only makes sense in Beamer.
+_BEAMER_ONLY_RE = re.compile(
+    r'\\(?:setbeamer\w*|usebeamer\w*|insert\w*|beamer\w*|usetheme|'
+    r'use\w*theme|alert|structure|only|onslide|uncover|visible|invisible|'
+    r'pause|temporal|alt|note|againframe|framezoom|frametitle|framesubtitle)'
+    r'(?![A-Za-z])'
+    r'|\bframenumber\b|\{frame\}'
+)
+# Macros the converter expands in the body itself (preprocess_body / the
+# endmatter helpers), so their slide-sized definitions must not come along.
+_EXPANDED_MACROS = frozenset({r'\fig'})
+
+
+def _in_tex_comment(text, pos):
+    """True if `pos` is preceded on its line by an unescaped '%'."""
+    line = text[text.rfind('\n', 0, pos) + 1:pos]
+    return re.search(r'(?<!\\)(?:\\\\)*%', line) is not None
+
+
+def extract_passthrough_macros(src):
+    r"""
+    Return the user macro definitions from the Beamer preamble that are safe
+    to carry into the manuscript preamble, and the names of those skipped.
+
+    Carried: ``\newcommand``, ``\providecommand``, ``\DeclareMathOperator``
+    (starred forms too), with optional ``[n][default]`` arguments and a
+    brace-balanced body of any length, reproduced verbatim.  Skipped:
+    definitions that use Beamer-only commands (``_BEAMER_ONLY_RE``) and
+    macros the converter expands itself (``_EXPANDED_MACROS``).  Commented-out
+    definitions are ignored.
+
+    Returns (block, skipped): block is a newline-joined string ('' if none);
+    skipped is a list of macro names.
+    """
+    preamble = _extract_preamble(src)
+    defs, skipped = [], []
+    pos = 0
+    while True:
+        m = _MACRO_DEF_RE.search(preamble, pos)
+        if not m:
+            break
+        if _in_tex_comment(preamble, m.start()):
+            pos = m.end()
+            continue
+        name = m.group(3) or m.group(4)
+        i = m.end()
+        # \newcommand: up to two [..] optional groups before the body
+        while True:
+            j = i
+            while j < len(preamble) and preamble[j].isspace():
+                j += 1
+            if m.group(1) != 'DeclareMathOperator' and j < len(preamble) and preamble[j] == '[':
+                close = preamble.find(']', j)
+                if close == -1:
+                    break
+                i = close + 1
+                continue
+            break
+        # body: the one brace group after the (braced or bare) name
+        j = i
+        while j < len(preamble) and preamble[j].isspace():
+            j += 1
+        if j >= len(preamble) or preamble[j] != '{':
+            pos = m.end()          # malformed / \newcommand\x\y form: skip
+            continue
+        body, end = _extract_brace_group(preamble, j)
+        text = preamble[m.start():end]
+        pos = end
+        if name in _EXPANDED_MACROS or _BEAMER_ONLY_RE.search(body):
+            skipped.append(name)
+            continue
+        defs.append(text)
+    return '\n'.join(defs), skipped
+
+
+def passthrough_preamble_block(src, default_packages=''):
+    r"""
+    Packages (``extract_passthrough_packages``, or `default_packages` if none)
+    followed by user macro definitions (``extract_passthrough_macros``), as one
+    newline-joined block for the manuscript preamble.  Prints one stderr note
+    naming Beamer-only definitions that were not carried.
+    """
+    pkgs = extract_passthrough_packages(src) or default_packages
+    macros, skipped = extract_passthrough_macros(src)
+    skipped = [n for n in skipped if n not in _EXPANDED_MACROS]
+    if skipped:
+        print('Note: Beamer-only macro definition(s) not carried to the '
+              'manuscript preamble: ' + ', '.join(skipped), file=sys.stderr)
+    parts = [pkgs]
+    if macros:
+        parts.append('%% User macros carried from the Beamer preamble\n' + macros)
+    return '\n'.join(x for x in parts if x)
 
 
 def _extract_bib_file(src):

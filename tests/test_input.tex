@@ -15,6 +15,19 @@
 \usepackage{multirow}
 \usepackage{appendixnumberbeamer}
 
+% User macros: carried into the manuscript preamble verbatim (multi-line body,
+% optional args, starred, DeclareMathOperator), except commented-out ones,
+% Beamer-only ones, and \fig (expanded by the converter).
+\newcommand{\TODO}[1]{\textcolor{red}{\textbf{TODO:} #1}}
+\newcommand{\vect}[2][x]{%
+  \mathbf{#1}_{#2}}
+\newcommand*\Rset{\mathbb{R}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+% \newcommand{\commentedmacro}{gone}
+\newcommand{\hl}[1]{\alert{#1}}
+\newcommand{\startappendix}{\setcounter{framenumber}{0}}
+\newcommand{\fig}[1]{\includegraphics[height=0.8\textheight]{#1}}
+
 \title[Short Title]{Full Test Title for Conversion Scripts}
 \author[]{Author One\inst{1} and Author Two\inst{2} and Author Three\inst{1}}
 \institute[]{%
@@ -159,6 +172,7 @@ Right column content.
 \alert{\textbf{Nested alert}} and \textcolor{red}{$x^{2}$ colored} and
 \only<2>{\emph{overlay text}} and \structure{\textit{structured}} and
 \alert{open \{ brace}.
+\TODO{check this claim} and $\vect{i} \in \Rset$, $\argmax_x f$.
 \setlength{\parskip}{1em}
 \vspace*{2pt}
 \end{frame}

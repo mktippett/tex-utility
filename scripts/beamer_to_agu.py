@@ -23,7 +23,7 @@ from beamer_common import (
     _extract_preamble_arg,
     _abbreviate_name,
     _extract_bib_file,
-    extract_passthrough_packages,
+    passthrough_preamble_block,
     preprocess_body,
     build_event_list,
     extract_abstract,
@@ -566,7 +566,7 @@ def convert(input_path, output_path, journal=None):
 
     # --- Write output -------------------------------------------------------
     journal_name = journal or _extract_journal_name(src)
-    pkg_ams = extract_passthrough_packages(src)
+    pkg_ams = passthrough_preamble_block(src)
     preamble = _build_agu_preamble(
         title_text, authors_block, affiliation_lines,
         corresponding, abstract_text, pls_text, journal_name, keypoints_items,

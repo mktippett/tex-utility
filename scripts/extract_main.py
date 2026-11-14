@@ -426,6 +426,20 @@ def _is_commented(text, pos):
         i = idx + 1
 
 
+_TODO_RE = re.compile(r'\\(?:TODO|todo)(?![A-Za-z@])')
+
+
+def find_todos(text):
+    """Line numbers (1-based) of live \\TODO / \\todo uses after
+    \\begin{document} -- the definition in the preamble doesn't count, and
+    neither does a use inside a % comment."""
+    body_start = text.find(r'\begin{document}')
+    body_start = 0 if body_start == -1 else body_start
+    return [text.count('\n', 0, m.start()) + 1
+            for m in _TODO_RE.finditer(text, body_start)
+            if not _is_commented(text, m.start())]
+
+
 def _live_figure_envs(text):
     """Iterate \\begin{figure}...\\end{figure} blocks, in document order,
     skipping any whose \\begin{figure} is commented out (e.g. leftover
@@ -738,7 +752,8 @@ def prune_intermediates(outdir, keep_log):
 
 def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
                   make_figures=True, inline_bib=True, no_si=False,
-                  compile_pdf=True, keep_intermediates=False, engine='auto'):
+                  compile_pdf=True, keep_intermediates=False, engine='auto',
+                  allow_todo=False):
     """
     Write a main-text-only manuscript derived from combined_tex into outdir.
 
@@ -761,6 +776,8 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
     keep_intermediates : if True, skip prune_intermediates
     engine       : 'pdflatex', 'xelatex', or 'auto' (choose_engine: the
                    journal submission system's engine for this class)
+    allow_todo   : if False (default), abort before writing anything when the
+                   main text still has live \\TODO{}/\\todo{} uses
 
     Returns the path to the written main.tex.
     """
@@ -795,6 +812,16 @@ def extract_main(combined_tex, aux_path=None, bbl_path=None, outdir=None,
                 'Aborting -- nothing written.')
         print(f'SI boundary found via {how}')
         main_text = strip_si(text, si_start)
+
+    todo_lines = find_todos(main_text)
+    if todo_lines:
+        where = ', '.join(map(str, todo_lines[:10])) + (' ...' if len(todo_lines) > 10 else '')
+        msg = (f'{len(todo_lines)} \\TODO{{}} remain in the main text '
+               f'(input line(s) {where})')
+        if not allow_todo:
+            sys.exit(f'FAIL: {msg}. Resolve them, or rerun with --allow-todo '
+                     'for a preview build. Aborting -- nothing written.')
+        print(f'Warning: {msg}; continuing (--allow-todo).', file=sys.stderr)
 
     if aux_path.exists():
         aux_labels = parse_aux_labels(aux_path.read_text(encoding='utf-8'))
@@ -953,6 +980,9 @@ def main():
                               'xelatex for the AMS class, which matched one AMS '
                               'system PDF but is unconfirmed by AMS; pdflatex '
                               'otherwise)')
+    parser.add_argument('--allow-todo', action='store_true',
+                         help='Build even if \\TODO{} uses remain in the main '
+                              'text (preview only; not for submission)')
     args = parser.parse_args()
 
     extract_main(args.combined_tex, args.combined_aux, args.bbl, args.outdir,
@@ -961,7 +991,8 @@ def main():
                   no_si=args.no_si,
                   compile_pdf=not args.no_compile,
                   keep_intermediates=args.keep_intermediates,
-                  engine=args.engine)
+                  engine=args.engine,
+                  allow_todo=args.allow_todo)
 
 
 if __name__ == '__main__':

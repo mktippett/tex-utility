@@ -175,6 +175,30 @@ math (`amsmath`, `amssymb`, `bm`, `mathtools`) and tables (`booktabs`,
 `longtable`).  Lines with any package not in the list are dropped (avoids
 beamer-only and class-provided duplicates).  Options (`[...]`) are preserved.
 
+`extract_passthrough_macros` (in `beamer_common.py`, added 2026-11-14) copies
+user macro definitions from the Beamer preamble into the manuscript preamble,
+verbatim, after the passthrough packages (via `passthrough_preamble_block`,
+under a `%% User macros carried from the Beamer preamble` comment). Carried:
+`\newcommand`, `\providecommand`, `\DeclareMathOperator`, starred or not,
+braced (`{\x}`) or bare (`\x`) name, up to two `[...]` optional groups, and a
+brace-balanced body of any length (multi-line `{%` bodies kept byte for byte).
+Not carried:
+- definitions inside a `%` comment (`_in_tex_comment`);
+- macros the converter expands itself (`_EXPANDED_MACROS` = `\fig`);
+- definitions whose body uses a Beamer-only command (`_BEAMER_ONLY_RE`:
+  `\setbeamer*`, `\usebeamer*`, `\insert*`, `\beamer*`, `\alert`,
+  `\structure`, `\only`, `\onslide`, `\uncover`, `\visible`, `\pause`,
+  `\note`, `\frametitle`, …, `framenumber`, `{frame}`) — e.g. the template's
+  `\startappendix`. One stderr `Note:` names these (not `\fig`);
+- `\renewcommand`, by decision: in every real deck it only retunes Beamer
+  template internals (`\renewcommand{\thesection}`), which would override the
+  journal class. The figure/table counter resets in the body are a separate
+  mechanism (passthrough events) and are unaffected.
+Motivation: a deck's `\TODO{}` (or any user macro) used in the body reached
+the manuscript undefined and stopped the compile. Both journal classes load
+`xcolor`, so a red `\TODO` needs nothing more. A definition that still fails
+in the article class shows up in `extract_main`'s test compile.
+
 ### 4.7 Bibliography file extraction (`_extract_bib_file`)
 
 `_extract_bib_file(src)` lives in `beamer_common.py` (shared with AMS converter).
@@ -417,3 +441,4 @@ and `_wrap_equations_linenomath` like the rest of the body.
 | 2026-10-19 | (a) Shared brace-nesting fixes (`_rewrite_command`: `\framesubtitle`, nested `\alert`/`\only`/`\textcolor`/…, two-argument `\setlength`) — see `beamer_to_ams_spec.md` sync log (2026-10-19). (b) Fixed text-only SI compile failure: with zero SI figures and tables every checklist item was commented out, leaving an empty `enumerate` ("Something's wrong--perhaps a missing \item"); present since the 2026-05-06 dynamic checklist. `_make_si_checklist` now comments out the whole block in that case. **Regression test added same day**: `check_text_only_si` (registered in `unit_sections`) — confirmed to fail on pre-fix code | Yes |
 | 2026-10-19 | Fixed crash on a deck with no `\author{}`: `_parse_authors_affiliations_agu` indexed `author_parts[-1]` on an empty list (`IndexError`; repro `~/tex/papers/CFSv2_monthly_climatology/slides.tex`, and also any `_manuscript.tex` fed back in, since those use `\authors`). Fixed in shared `_parse_inst_blocks` (placeholder `First Last` author), so AMS gains a placeholder too — see `beamer_to_ams_spec.md` sync log. **Regression test added same day** (`check_noinst_fallback_unit`) | Yes |
 | 2026-11-08 | Shared fix for GitHub issue #1: `\input`-ed tables now get a float, keeping the `\input` — see `beamer_to_ams_spec.md` sync log (2026-11-08) | Yes |
+| 2026-11-14 | Shared (`beamer_common.py`): new `extract_passthrough_macros` + `passthrough_preamble_block` copy user `\newcommand`/`\providecommand`/`\DeclareMathOperator` definitions from the deck preamble into the manuscript preamble (previously all were dropped, so a body `\TODO{}` was an undefined control sequence — 3 errors in `neuralGCM-TC/slides-clim-v1_manuscript.log`). Skips commented, `\fig`, Beamer-only (`\startappendix`), and all `\renewcommand` (deliberate; real decks only use it for `\thesection`). `{%` bodies kept verbatim — a first draft that stripped comments before extracting lost the `%` and added a leading space. Tests: new `check_user_macros` (both converters; fixture macros in `tests/test_input.tex`), "Beamer markup unwrapped" check narrowed to the body since the carried `\TODO` definition contains `\textcolor`; 16 checks fail on the pre-change code. `slides-clim-v1` compiles with 0 errors against real `ametsocV6.1.cls` and `agujournal2019.cls`; all 24 real-deck conversions (12 decks × 2) still succeed | Yes |

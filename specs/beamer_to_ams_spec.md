@@ -143,6 +143,34 @@ tested and has no effect on `-sum`):
    - `\affiliation{\n  \aff{a}{text}\\\n  \aff{b}{text}\n}`
    First author is assumed corresponding; abbreviated name uses initials
    for all words except the last (`_abbreviate_name`).
+3. **Packages and user macros** (shared, `passthrough_preamble_block`):
+   allowlisted `\usepackage` lines (`extract_passthrough_packages`; fallback
+   `\usepackage{amsmath,amssymb}` when none), then user macro definitions.
+   Rules as in `beamer_to_agu_spec.md` §4.6:
+
+   `extract_passthrough_macros` (in `beamer_common.py`, added 2026-11-14) copies
+   user macro definitions from the Beamer preamble into the manuscript preamble,
+   verbatim, after the passthrough packages (via `passthrough_preamble_block`,
+   under a `%% User macros carried from the Beamer preamble` comment). Carried:
+   `\newcommand`, `\providecommand`, `\DeclareMathOperator`, starred or not,
+   braced (`{\x}`) or bare (`\x`) name, up to two `[...]` optional groups, and a
+   brace-balanced body of any length (multi-line `{%` bodies kept byte for byte).
+   Not carried:
+   - definitions inside a `%` comment (`_in_tex_comment`);
+   - macros the converter expands itself (`_EXPANDED_MACROS` = `\fig`);
+   - definitions whose body uses a Beamer-only command (`_BEAMER_ONLY_RE`:
+     `\setbeamer*`, `\usebeamer*`, `\insert*`, `\beamer*`, `\alert`,
+     `\structure`, `\only`, `\onslide`, `\uncover`, `\visible`, `\pause`,
+     `\note`, `\frametitle`, …, `framenumber`, `{frame}`) — e.g. the template's
+     `\startappendix`. One stderr `Note:` names these (not `\fig`);
+   - `\renewcommand`, by decision: in every real deck it only retunes Beamer
+     template internals (`\renewcommand{\thesection}`), which would override the
+     journal class. The figure/table counter resets in the body are a separate
+     mechanism (passthrough events) and are unaffected.
+   Motivation: a deck's `\TODO{}` (or any user macro) used in the body reached
+   the manuscript undefined and stopped the compile. Both journal classes load
+   `xcolor`, so a red `\TODO` needs nothing more. A definition that still fails
+   in the article class shows up in `extract_main`'s test compile.
 
 ### 4.2 Body preprocessing
 
@@ -523,6 +551,7 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | `\label{}` on the appendix marker section (or a later `\section{}` opening a subsequent appendix) | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.10. Workaround: attach the label to a `\subsection{}` inside the appendix instead |
 | Table `\input` forms not wrapped | **Open item (found 2026-11-08, GitHub issue #1).** Plain `\caption{}` next to `\input` carries no type and still gives `\caption outside float`; `\scalebox`/`adjustbox` around a table survive into the manuscript. Issue closed 2026-11-08 after the reporting deck compiled clean in AGU. Decisions to make: treat plain `\caption` + `\input` as a table, or keep requiring `\captionof{table}`; strip the other sizing wrappers or leave them |
 | Data availability statement in the word count | **Open item (found 2026-11-02).** The 2026-09-15 fix counts the `\datastatement` text "by conservative reading" because the search-sourced exclusion list didn't name it. The ametsoc.org *Formatting and Manuscript Components* page (user-pasted 2026-11-02) explicitly excludes the "data availability statement" from the 7500-word limit, so the count is now an over-count by that statement's length. Decision to make: TC-ignore the data statement only (acknowledgments stay counted), or leave the conservative over-count |
+| `\item` text ending in terminal punctuation inside a macro argument, e.g. `\item \TODO{Something else?}` | **Open item (found 2026-11-14).** Shared `_flatten_lists` appends a period after the closing brace, giving `\TODO{Something else?}.` → "?." (also `...cite.}.` in `neuralGCM-TC/slides-clim-v1`). The 2026-08-08 doubled-period check only looks before display-math closers, not past a `}`. Decision to make: look through trailing `}` to the last character of the argument (risks missing a needed period after e.g. `\emph{word}`) or only for a known list of sentence-wrapping macros (`\TODO`, `\emph`, `\textbf`, …) |
 | Multi-affiliation `\inst{1,2}` | **Open item (found 2026-10-28).** Garbles the author list: `_AUTHOR_SEP_RE` (shared, `beamer_common.py`) splits on the comma inside the braces, so `John Doe\inst{1,2}` becomes two authors, `John Doe\inst{1` and `2}`. Documented in README (*Metadata*: one `\inst{N}` per author). Decision to make: support it (brace-aware author split, then `\inst{1,2}` → `\aff{a}\aff{b}` / AGU `\affil{1}\affil{2}`) or reject it with a clear error |
 | AMS template V6.2 (dated 1 September 2026; package in `~/tex/mine/AMS LaTeX Package 6.2/`) | **Open item / TODO (found 2026-11-05, user chose to defer).** The converter still targets V6.1. Switching means: `\documentclass{ametsocV6.2}` + copying `ametsocV6.2.cls` into `ams/`; `\datastatement` → `\availstatement` (heading becomes "Availability statement."; V6.2 keeps `\datastatement` as an alias that prints the new heading); the commented `%\statement` block → `%\sigstatement` (`\statement` kept as an alias); update the hard-coded `ametsocV6.1` references in comments, tests, README. Class diff is 40 lines with no layout/font/spacing change; `ametsocV6.bst` is byte-identical; `\capsule` removed (unused here). V6.2 README's claim of a new `\clearpage` before references is in `templateV6.2.tex`, not the class, and the converter already emits one. `extract_main.py`'s `ametsoc` prefix match picks xelatex for V6.2 unchanged |
 
@@ -591,3 +620,4 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | 2026-11-02 | Generated AMS figure/table floats no longer get `[h]`: `_AMS_FIGURE_OPTS` and the SI `figure_opts` set `placement=''` (previously defaulted to `'h'` from `transform_content`). User-reported: in `neuralGCM-TC/slides-clim-v1.tex` a full-width `\captionof` figure (Fig. 7, first cited p. 14) came out `[h]` → demoted to `[ht]`, fit neither, and held Figs. 8–14 until p. 24–28. After the fix, a scratch reconvert + compile puts Fig. 7 on p. 15 and Fig. 14 on p. 21, no undefined references. Matches AGU, which already used `placement=''`. Tests: `check_manuscript` table-wrapper regex no longer expects `[h]`; new check that no AMS `figure`/`table` float carries `[h]`. Same session found the data-statement word-count open item (§6) | Yes |
 | 2026-11-07 | Shared (`beamer_common.transform_content`): also strip the `column` *environment* form (`\begin{column}[opt]{width}` … `\end{column}`); only the `\column{width}` command form was stripped, so a deck using the environment (neuralGCM-wx-regimes `grl/tex/grl_slides.tex`, 22 frames) produced 89 compile errors (`Environment column undefined`). Test deck gained an environment-form block; `check_agu`/`check_manuscript` assert the tags are gone and the content kept (both checks fail without the fix). | Yes |
 | 2026-11-08 | Shared, GitHub issue #1: `\captionof{table}` + `\input{file}` produced a loose `\caption` (`\caption outside float`, 3 of 3 tables in the reporting deck) because `_restructure_tables` only recognizes a literal `tabular`. New `_restructure_input_tables` (§4.6 step 5b) keeps the `\input` in the float so the manuscript cannot drift from the generated table; `extract_main.py` inlines it at submission. `_restructure_tables` also unwraps `\resizebox` around an inline tabular, where the float had been built inside the box and the caption left outside. `_emit_table_float` factored out. Tests: `check_input_tables_unit`. Verified on a scratch deck in AGU and AMS: 0 LaTeX errors, and editing the table file changes the PDF without reconverting | Yes |
+| 2026-11-14 | Shared (`beamer_common.py`): new `extract_passthrough_macros` + `passthrough_preamble_block` copy user `\newcommand`/`\providecommand`/`\DeclareMathOperator` definitions from the deck preamble into the manuscript preamble (previously all were dropped, so a body `\TODO{}` was an undefined control sequence — 3 errors in `neuralGCM-TC/slides-clim-v1_manuscript.log`). Skips commented, `\fig`, Beamer-only (`\startappendix`), and all `\renewcommand` (deliberate; real decks only use it for `\thesection`). `{%` bodies kept verbatim — a first draft that stripped comments before extracting lost the `%` and added a leading space. Tests: new `check_user_macros` (both converters; fixture macros in `tests/test_input.tex`), "Beamer markup unwrapped" check narrowed to the body since the carried `\TODO` definition contains `\textcolor`; 16 checks fail on the pre-change code. `slides-clim-v1` compiles with 0 errors against real `ametsocV6.1.cls` and `agujournal2019.cls`; all 24 real-deck conversions (12 decks × 2) still succeed | Yes |

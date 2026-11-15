@@ -156,6 +156,12 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 \usepackage{{natbib}}
 \usepackage{{caption}}
 
+%% texcount: the \abstract{{}} argument goes to the "words outside text"
+%% counter (every main-text caption is %TC:ignore-wrapped, so it holds
+%% only the abstract). Count with  texcount -sum=1,1,0,0,0,1,1  -> Sum = body,
+%% "Words outside text" = abstract. Plain -sum would add the abstract in.
+%TC:macro \abstract [other]
+
 \begin{{document}}
 
 %TC:ignore
@@ -164,11 +170,13 @@ def _build_preamble(title, authors_block, affiliation_block, abstract_text,
 {authors_block}
 
 {affiliation_block}
+%TC:endignore
 
 \abstract{{
   {abstract_text}
 }}
 
+%TC:ignore
 \maketitle
 %TC:endignore
 
@@ -213,6 +221,82 @@ _AMS_FIGURE_OPTS = {
     'placement': '',
     'caption_tcignore': True,
 }
+
+
+_TC_TOGGLE_RE = re.compile(r'^%TC:(ignore|endignore)[ \t]*$', re.MULTILINE)
+_CAPTION_CMD_RE = re.compile(r'\\caption(of)?(?![A-Za-z])')
+
+
+def _caption_end(text, i, is_captionof):
+    r"""
+    End index of the \caption[short]{...} or \captionof{type}[short]{...}
+    starting at text[i], or None if it doesn't parse.
+    """
+    j = i + len(r'\captionof' if is_captionof else r'\caption')
+    n_groups = 2 if is_captionof else 1
+    for g in range(n_groups):
+        while j < len(text) and text[j] in ' \t\n':
+            j += 1
+        if g == n_groups - 1 and j < len(text) and text[j] == '[':
+            close = text.find(']', j)
+            if close == -1:
+                return None
+            j = close + 1
+            while j < len(text) and text[j] in ' \t\n':
+                j += 1
+        if j >= len(text) or text[j] != '{':
+            return None
+        _, j = _extract_brace_group(text, j)
+    return j
+
+
+def _tcignore_all_captions(text):
+    r"""
+    Wrap every \caption / \captionof in `text` that texcount would still
+    count in flush-left %TC:ignore / %TC:endignore lines.
+
+    _AMS_FIGURE_OPTS already wraps the captions of floats the converter
+    builds; this catches the rest -- floats the deck already wrote as
+    figure/table environments, passed through verbatim (found 2026-11-15:
+    512 caption words in neuralGCM-TC/slides-clim-v1, which landed in the
+    "words outside text" counter alongside the abstract).
+
+    The %TC:ignore markers are an on/off toggle, not a nesting counter, so
+    the pass tracks the toggle state and leaves alone any caption already
+    inside an ignored region (including the generated per-caption pairs and
+    the SI region) -- wrapping it would flip ignoring off mid-region.
+    Captions on commented-out lines are skipped: the inserted newline would
+    uncomment them.
+    """
+    events = sorted(
+        [(m.start(), 'toggle', m) for m in _TC_TOGGLE_RE.finditer(text)]
+        + [(m.start(), 'caption', m) for m in _CAPTION_CMD_RE.finditer(text)],
+        key=lambda e: e[0])
+    out, pos, ignoring = [], 0, False
+    for start, kind, m in events:
+        if start < pos:
+            continue  # inside a caption already wrapped
+        if kind == 'toggle':
+            ignoring = m.group(1) == 'ignore'
+            continue
+        if ignoring:
+            continue
+        line = text[text.rfind('\n', 0, start) + 1:start]
+        if re.search(r'(?<!\\)%', line):
+            continue
+        end = _caption_end(text, start, bool(m.group(1)))
+        if end is None:
+            continue
+        pre = text[pos:start].rstrip(' \t')
+        out.append(pre)
+        lead = '' if (pre.endswith('\n') or not pre) else '\n'
+        out.append(lead + '%TC:ignore\n' + text[start:end] + '\n%TC:endignore\n')
+        pos = end
+        # drop the line break the inserted one replaces
+        if text.startswith('\n', pos):
+            pos += 1
+    out.append(text[pos:])
+    return ''.join(out)
 
 # Endmatter sentinel labels shared with beamer_to_agu.py (%% <LABEL>_BEGIN/END
 # around normal Beamer frames; canonical labels from
@@ -441,9 +525,11 @@ def convert(input_path, output_path):
     if not events:
         print("Warning: no frames or sections found; writing body as-is.",
               file=sys.stderr)
-        manuscript_body = transform_content(body, figure_opts=_AMS_FIGURE_OPTS)
+        manuscript_body = _tcignore_all_captions(
+            transform_content(body, figure_opts=_AMS_FIGURE_OPTS))
     else:
-        manuscript_body = assemble_body(main_events, figure_opts=_AMS_FIGURE_OPTS)
+        manuscript_body = _tcignore_all_captions(
+            assemble_body(main_events, figure_opts=_AMS_FIGURE_OPTS))
         if si_events:
             si_body = assemble_body(si_events, figure_opts={'placement': '', 'caption_tcignore': False})
             if si_body.strip():

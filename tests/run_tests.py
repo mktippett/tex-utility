@@ -206,7 +206,7 @@ def check_agu(text):
     check('SI title',                  text, r'Supporting Information for')
     # 3 SI figures: two \fig{} frames + one two-panel \includegraphics frame
     # (counts floats, not graphics -- the two panels are one figure)
-    check('SI figures S1 to S3',       text, r'\\item Figures S1 to S3')
+    check('SI figures S1 to S4',       text, r'\\item Figures S1 to S4')
     check('SI checklist placeholder filled', text, r'SI_CHECKLIST_PLACEHOLDER',
           present=False)
     check('SI table S1 singular',      text, r'\\item Table S1')
@@ -216,6 +216,32 @@ def check_agu(text):
 # ---------------------------------------------------------------------------
 # AMS checks
 # ---------------------------------------------------------------------------
+
+def _check_texcount_abstract_only(text):
+    """texcount invariant for AMS output: the "words outside text" counter
+    holds only the abstract (the _top_ subcount, before the first section),
+    with no caption words in any other subcount, and no parse errors."""
+    if shutil.which('texcount') is None:
+        print('  SKIP  texcount not on PATH')
+        return
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / 'm.tex'
+        f.write_text(text)
+        res = subprocess.run(['texcount', '-sum=1,1,0,0,0,1,1', '-sub', str(f)],
+                             capture_output=True, text=True)
+    out = res.stdout
+    subs = re.findall(r'^\s+(\d+)\+(\d+)\+(\d+) \([^)]*\) (.*)$', out, re.MULTILINE)
+    top = [int(c) for _, _, c, name in subs if name == '_top_']
+    others = sum(int(c) for _, _, c, name in subs if name != '_top_')
+    outside = re.search(r'Words outside text \(captions, etc\.\): (\d+)', out)
+    if 'rror' in out or not top or not outside:
+        _failures.append('  FAIL  texcount abstract-only: errors or missing '
+                         f'counts in texcount output:\n{out}')
+    elif top[0] == 0 or others or int(outside.group(1)) != top[0]:
+        _failures.append(f'  FAIL  texcount abstract-only: _top_={top[0]}, '
+                         f'caption words elsewhere={others}, '
+                         f'outside-text total={outside.group(1)}')
+
 
 def check_manuscript(text):
     check('column env tags stripped', text, r'\\(begin|end)\{column\}', present=False)
@@ -269,6 +295,22 @@ def check_manuscript(text):
     # the §2b fix removed the stray %TC:ignore that used to wrap this block
     check('acknowledgments NOT tc-ignored', text,
           r'%TC:ignore\s*\\acknowledgments', present=False)
+    # abstract counted separately: routed to texcount's "outside text"
+    # counter and left outside the front-matter ignore block
+    check('abstract tc macro directive', text,
+          r'^%TC:macro \\abstract \[other\]$', flags=re.MULTILINE)
+    check('abstract outside tc-ignore', text,
+          r'%TC:endignore\s*\\abstract\{.*?\}\s*%TC:ignore\s*\\maketitle\s*%TC:endignore',
+          flags=re.DOTALL)
+    # verbatim-passthrough float: caption still tc-ignored in main text...
+    check('prebuilt float caption tc-ignored', text,
+          r'^%TC:ignore\n\\caption\{Prebuilt float caption.*?\}\n%TC:endignore$',
+          flags=re.MULTILINE)
+    # ...but not inside the SI, where a per-caption pair would flip the
+    # outer SI ignore toggle off
+    check('SI prebuilt caption NOT re-wrapped', text,
+          r'%TC:ignore\s*\\caption\{SI prebuilt caption', present=False)
+    _check_texcount_abstract_only(text)
 
     # --- appendix (2 sections -> auto-lettered A, B) ---
     check('appendix[A] cmd',           text, r'\\appendix\[A\]')

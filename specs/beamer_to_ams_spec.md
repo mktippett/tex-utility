@@ -70,9 +70,22 @@ Unlike AGU's word-count rule, it also excludes **captions**. Verified against
 `%TC:ignore` wrapping reliably zeroes a region; `%TC:macro \caption 0` was
 tested and has no effect on `-sum`):
 
-- Front matter: `%TC:ignore` immediately after `\begin{document}`,
-  `%TC:endignore` immediately after `\maketitle` (`_build_preamble`) — wraps
-  title/authors/affiliation/abstract in one block.
+- Front matter (`_build_preamble`, revised 2026-11-15): two ignore blocks —
+  `%TC:ignore` after `\begin{document}` through `%TC:endignore` after the
+  affiliation block (title/authors/affiliation), and a second pair around
+  `\maketitle` alone. The `\abstract{}` between them is **not** ignored;
+  instead a preamble directive `%TC:macro \abstract [other]` sends its
+  argument to texcount's "words outside text" counter (counter 3), which is
+  otherwise empty because every main-text caption — generated or verbatim passthrough — is `%TC:ignore`-wrapped
+  and SI is ignored. The intended command is
+  `texcount -sum=1,1,0,0,0,1,1` (default `-sum` weights with counter 3
+  zeroed; user alias `tc`): Sum = body count under AMS's limit, "Words
+  outside text" = abstract count. Plain `-sum` now **includes** the
+  abstract — a deliberate trade for getting the abstract count from one
+  run. `-sum=1,1` is not equivalent: unspecified weights become 0, dropping
+  the math counters that default `-sum` includes. Verified on
+  `enso-global-temperature-slides-v5.tex`: weighted Sum 2614 (identical to
+  the pre-change `-sum`), outside text 103 = abstract, zero errors.
 - Captions: every generated `\caption{...}` — figure **and** table — is
   individually wrapped in `%TC:ignore`/`%TC:endignore`
   (`_restructure_figures`/`_restructure_tables`, gated by the
@@ -81,6 +94,19 @@ tested and has no effect on `-sum`):
   its captions still count per AGU's rule) — **except** captions inside the
   Supplemental Information section (see below), which must not get this
   per-caption wrapping.
+- Verbatim-passthrough captions (added 2026-11-15): floats the deck already
+  wrote as `figure`/`table` environments bypass `_restructure_figures`, so
+  their captions got no markers and were counted (512 caption words in
+  `neuralGCM-TC/slides-clim-v1`, plus 13 caption inline-math items that
+  default `-sum` weights count as body). `_tcignore_all_captions` runs on
+  the assembled main body (not the SI body) and wraps every remaining
+  `\caption`/`\captionof` in flush-left `%TC:ignore`/`%TC:endignore` lines.
+  It tracks the toggle state and skips any caption already inside an
+  ignored region (the generated per-caption pairs, the SI region opened at
+  `%% SI_BEGIN`), and skips captions on commented-out lines (the inserted
+  newline would uncomment them). It omits the leading newline when the
+  caption already starts a line, so no blank line (`\par`) is introduced;
+  verified the regenerated clim-v1 PDF is byte-size identical.
 - texcount's `%TC:ignore`/`%TC:endignore` markers are an on/off **toggle**,
   not a nesting counter: a `%TC:endignore` while already ignoring turns
   ignoring off, even if it was meant to close an "inner" pair. SI content
@@ -116,9 +142,11 @@ tested and has no effect on `-sum`):
   the combined file and on the `extract_main.py`-split `main.tex` both report
   the same Sum, zero "words outside text," and zero errors.
 - All markers are emitted flush-left on their own line (required by
-  texcount). `%TC:macro` directives were tried and rejected — they didn't
-  change `-sum`; only `%TC:ignore` wrapping (or a runtime `-sum=` flag,
-  not file-bakeable) works.
+  texcount). `%TC:macro` directives were tried and rejected as a way to
+  *zero* a region — they didn't change `-sum`; only `%TC:ignore` wrapping
+  (or a runtime `-sum=` flag, not file-bakeable) works. `%TC:macro` *is*
+  used (2026-11-15) to *reroute* the abstract into counter 3, paired with
+  the `-sum=` weights that drop that counter — see Front matter above.
 
 ---
 
@@ -551,7 +579,8 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | `\label{}` on the appendix marker section (or a later `\section{}` opening a subsequent appendix) | Silently dropped; `\ref{}` to it resolves to `??`. Recorded limitation, not fixed, deferred by user's own choice 2026-09-15 — see §4.10. Workaround: attach the label to a `\subsection{}` inside the appendix instead |
 | Table `\input` forms not wrapped | **Open item (found 2026-11-08, GitHub issue #1).** Plain `\caption{}` next to `\input` carries no type and still gives `\caption outside float`; `\scalebox`/`adjustbox` around a table survive into the manuscript. Issue closed 2026-11-08 after the reporting deck compiled clean in AGU. Decisions to make: treat plain `\caption` + `\input` as a table, or keep requiring `\captionof{table}`; strip the other sizing wrappers or leave them |
 | Data availability statement in the word count | **Open item (found 2026-11-02).** The 2026-09-15 fix counts the `\datastatement` text "by conservative reading" because the search-sourced exclusion list didn't name it. The ametsoc.org *Formatting and Manuscript Components* page (user-pasted 2026-11-02) explicitly excludes the "data availability statement" from the 7500-word limit, so the count is now an over-count by that statement's length. Decision to make: TC-ignore the data statement only (acknowledgments stay counted), or leave the conservative over-count |
-| `\item` text ending in terminal punctuation inside a macro argument, e.g. `\item \TODO{Something else?}` | **Open item (found 2026-11-14).** Shared `_flatten_lists` appends a period after the closing brace, giving `\TODO{Something else?}.` → "?." (also `...cite.}.` in `neuralGCM-TC/slides-clim-v1`). The 2026-08-08 doubled-period check only looks before display-math closers, not past a `}`. Decision to make: look through trailing `}` to the last character of the argument (risks missing a needed period after e.g. `\emph{word}`) or only for a known list of sentence-wrapping macros (`\TODO`, `\emph`, `\textbf`, …) |
+| `\item` text ending in terminal punctuation inside a macro argument, e.g. `\item \TODO{Something else?}` | **Open item (found 2026-11-14).** Shared `_flatten_lists` appends a period after the closing brace, giving `\TODO{Something else?}.` → "?." (also `...cite.}.` in `neuralGCM-TC/slides-clim-v1`). Same bug with a float: an `\item` whose text ends in a `\begin{table}...\end{table}` gets `\end{table}.` (clim-v1, Table `tab:active`, seen 2026-11-15) — the period lands after the float, typesetting a stray "." in the next paragraph. The 2026-08-08 doubled-period check only looks before display-math closers, not past a `}`. Decision to make: look through trailing `}` to the last character of the argument (risks missing a needed period after e.g. `\emph{word}`) or only for a known list of sentence-wrapping macros (`\TODO`, `\emph`, `\textbf`, …) |
+| Stale `examples/enso-global-temperature-slides-v5_manuscript.tex` | **Open item (found 2026-11-15).** The committed AMS example output predates the 2026-07-02 `%TC` markers (0 markers; `texcount -sum` 3393 vs 2614 from a fresh conversion). Decision to make: regenerate the committed example outputs (AMS and AGU) to current converter behavior, or stop committing generated outputs |
 | Multi-affiliation `\inst{1,2}` | **Open item (found 2026-10-28).** Garbles the author list: `_AUTHOR_SEP_RE` (shared, `beamer_common.py`) splits on the comma inside the braces, so `John Doe\inst{1,2}` becomes two authors, `John Doe\inst{1` and `2}`. Documented in README (*Metadata*: one `\inst{N}` per author). Decision to make: support it (brace-aware author split, then `\inst{1,2}` → `\aff{a}\aff{b}` / AGU `\affil{1}\affil{2}`) or reject it with a clear error |
 | AMS template V6.2 (dated 1 September 2026; package in `~/tex/mine/AMS LaTeX Package 6.2/`) | **Open item / TODO (found 2026-11-05, user chose to defer).** The converter still targets V6.1. Switching means: `\documentclass{ametsocV6.2}` + copying `ametsocV6.2.cls` into `ams/`; `\datastatement` → `\availstatement` (heading becomes "Availability statement."; V6.2 keeps `\datastatement` as an alias that prints the new heading); the commented `%\statement` block → `%\sigstatement` (`\statement` kept as an alias); update the hard-coded `ametsocV6.1` references in comments, tests, README. Class diff is 40 lines with no layout/font/spacing change; `ametsocV6.bst` is byte-identical; `\capsule` removed (unused here). V6.2 README's claim of a new `\clearpage` before references is in `templateV6.2.tex`, not the class, and the converter already emits one. `extract_main.py`'s `ametsoc` prefix match picks xelatex for V6.2 unchanged |
 
@@ -621,3 +650,5 @@ intact) and do correctly `\refstepcounter`, in both formats.
 | 2026-11-07 | Shared (`beamer_common.transform_content`): also strip the `column` *environment* form (`\begin{column}[opt]{width}` … `\end{column}`); only the `\column{width}` command form was stripped, so a deck using the environment (neuralGCM-wx-regimes `grl/tex/grl_slides.tex`, 22 frames) produced 89 compile errors (`Environment column undefined`). Test deck gained an environment-form block; `check_agu`/`check_manuscript` assert the tags are gone and the content kept (both checks fail without the fix). | Yes |
 | 2026-11-08 | Shared, GitHub issue #1: `\captionof{table}` + `\input{file}` produced a loose `\caption` (`\caption outside float`, 3 of 3 tables in the reporting deck) because `_restructure_tables` only recognizes a literal `tabular`. New `_restructure_input_tables` (§4.6 step 5b) keeps the `\input` in the float so the manuscript cannot drift from the generated table; `extract_main.py` inlines it at submission. `_restructure_tables` also unwraps `\resizebox` around an inline tabular, where the float had been built inside the box and the caption left outside. `_emit_table_float` factored out. Tests: `check_input_tables_unit`. Verified on a scratch deck in AGU and AMS: 0 LaTeX errors, and editing the table file changes the PDF without reconverting | Yes |
 | 2026-11-14 | Shared (`beamer_common.py`): new `extract_passthrough_macros` + `passthrough_preamble_block` copy user `\newcommand`/`\providecommand`/`\DeclareMathOperator` definitions from the deck preamble into the manuscript preamble (previously all were dropped, so a body `\TODO{}` was an undefined control sequence — 3 errors in `neuralGCM-TC/slides-clim-v1_manuscript.log`). Skips commented, `\fig`, Beamer-only (`\startappendix`), and all `\renewcommand` (deliberate; real decks only use it for `\thesection`). `{%` bodies kept verbatim — a first draft that stripped comments before extracting lost the `%` and added a leading space. Tests: new `check_user_macros` (both converters; fixture macros in `tests/test_input.tex`), "Beamer markup unwrapped" check narrowed to the body since the carried `\TODO` definition contains `\textcolor`; 16 checks fail on the pre-change code. `slides-clim-v1` compiles with 0 errors against real `ametsocV6.1.cls` and `agujournal2019.cls`; all 24 real-deck conversions (12 decks × 2) still succeed | Yes |
+| 2026-11-15 | AMS abstract word count reported separately (user request): abstract moved out of the front-matter `%TC:ignore` block (now two blocks: title/authors/affiliation, and `\maketitle`); preamble `%TC:macro \abstract [other]` routes it to texcount's "words outside text" counter. Count with `texcount -sum=1,1,0,0,0,1,1` (user alias `tc`): Sum = body, outside text = abstract; plain `-sum` now includes the abstract. Verified on `enso-global-temperature-slides-v5.tex`: weighted Sum 2614 (unchanged), abstract 103. **Regression tests added**: directive present; `\abstract{}` sits between `%TC:endignore` and the `\maketitle` ignore pair | Yes |
+| 2026-11-15 | Captions of verbatim-passthrough floats now `%TC:ignore`-wrapped (`_tcignore_all_captions`, main body only, toggle-state aware, skips commented lines). Found when the abstract-count change put 512 passthrough-caption words in the "outside text" counter on `neuralGCM-TC/slides-clim-v1`; after the fix that counter = abstract (242) and the weighted Sum fell 6901 → 6888 (13 caption inline-math items no longer counted as body). PDF unchanged. **Regression tests added**: prebuilt main-text and SI floats in `tests/test_input.tex` (main caption wrapped, SI caption not), and a texcount invariant (all outside-text words in the `_top_` subcount, zero errors); confirmed to fail on the pre-fix code | Yes |

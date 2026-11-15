@@ -204,9 +204,14 @@ Things to fill in before sending to coauthors:
   `\maketitle` to 120 words and uncomment it, or delete it
 - Check `\bibliographystyle{}` is `ametsocV6` — the deck's style is copied
   verbatim, so a `plainnat` deck needs fixing here (or in the deck)
-- Run `texcount <output>_manuscript.tex` to get a word count; `%TC:ignore` markers are
-  already in place to exclude title/authors/affiliation/abstract, captions,
-  references, and SI per AMS's word-limit rule. Acknowledgments, the data
+- Run `texcount -sum=1,1,0,0,0,1,1 <output>_manuscript.tex` (shell alias `tc`)
+  for the word count: **Sum count** = body words under AMS's limit, **Words
+  outside text** = abstract (limit 250). `%TC:ignore` markers exclude
+  title/authors/affiliation, all captions (including floats the deck wrote
+  as `figure`/`table` environments), references, and SI; a
+  `%TC:macro \abstract [other]` directive routes the abstract into the
+  otherwise-empty "outside text" counter. Plain `texcount -sum` adds the
+  abstract into the Sum — don't use it. Acknowledgments, the data
   statement, and appendixes are **counted**, as AMS's limit requires
 
 **AGU:**
@@ -609,8 +614,10 @@ main text, and `main-and-si-SI.pdf` for the SI.
 - `\section{Appendix…}` opens the appendix (see *Appendix* below); the
   appendix block sits between the endmatter and the bibliography (AMS
   template order)
-- `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation/
-  abstract block ignored, every figure/table caption ignored, SI ignored —
+- `%TC:ignore` / `%TC:endignore` markers for `texcount`: title/authors/affiliation
+  block and `\maketitle` ignored; abstract counted separately in texcount's
+  "words outside text" counter (`%TC:macro \abstract [other]`; count with
+  `texcount -sum=1,1,0,0,0,1,1`); every figure/table caption ignored, SI ignored —
   AMS's word-limit rule excludes captions in particular, unlike AGU, which
   counts them. Body text, acknowledgments/data statement, and appendixes are
   **not** ignored — AMS's published limit counts all of these

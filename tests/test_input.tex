@@ -206,6 +206,15 @@ Std deviation  & 0.87     & 0.91     \\
 \end{tabular}
 \end{frame}
 
+\begin{frame}{Prebuilt Float}
+% A float the deck already wrote as a figure environment -- passed through
+% verbatim; AMS must still %TC:ignore-wrap its caption (2026-11-15).
+\begin{figure}
+  \includegraphics[width=0.6\linewidth]{test_figure_3.pdf}
+  \caption{Prebuilt float caption with $x = 1$ math.}\label{fig:prebuilt}
+\end{figure}
+\end{frame}
+
 % -----------------------------------------------------------------------
 % Conclusions
 % -----------------------------------------------------------------------
@@ -296,6 +305,13 @@ development team.
 \begin{frame}{SI: Two-panel composite}
   \includegraphics[width=0.49\linewidth]{test_si_panel_a.pdf}
   \includegraphics[width=0.49\linewidth]{test_si_panel_b.pdf}
+\end{frame}
+
+\begin{frame}{SI: Prebuilt Float}
+\begin{figure}
+  \includegraphics[width=0.6\linewidth]{test_si_figure_3.pdf}
+  \caption{SI prebuilt caption.}
+\end{figure}
 \end{frame}
 
 \begin{frame}{SI: Full Statistics}

@@ -567,6 +567,9 @@ main text, and `main-and-si-SI.pdf` for the SI.
 - Frame titles are dropped; frame content becomes prose paragraphs
 - `\section{Abstract}` and its frames are extracted into the abstract block
 - `\includegraphics` is wrapped in `\begin{figure}` with `\caption` and `\label`
+- A `\begin{figure}` the deck already wrote is kept; if it has no caption and
+  a `\captionof{figure}` follows it (e.g. in a side-by-side minipage), the
+  caption and its `\label` are moved inside the float
 - Bare `tabular`/`tabular*`/`tabularx` blocks are wrapped in `\begin{table}`,
   with an adjacent `\caption{}` (immediately before or after the tabular) and
   its `\label{}` attached; the caption is placed above the tabular

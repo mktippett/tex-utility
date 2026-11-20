@@ -220,6 +220,20 @@ Std deviation  & 0.87     & 0.91     \\
 \end{figure}
 \end{frame}
 
+\begin{frame}{Side Caption}
+% Figure float in one minipage, \captionof in the next (2026-11-20): the
+% caption must move into the float, not land after \end{figure}.
+\begin{minipage}{0.7\linewidth}
+  \begin{figure}
+    \includegraphics[width=\linewidth]{test_figure_4.pdf}
+  \end{figure}
+\end{minipage}
+\begin{minipage}[h]{0.25\linewidth}
+  \captionof{figure}{\fontsize{7pt}{9pt}\selectfont Side caption
+    beside the float.}\label{fig:side}
+\end{minipage}
+\end{frame}
+
 % -----------------------------------------------------------------------
 % Conclusions
 % -----------------------------------------------------------------------

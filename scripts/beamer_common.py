@@ -450,6 +450,19 @@ def transform_content(content, figure_opts=None):
     return content
 
 
+# A \caption (not \captionof/\captionsetup) anywhere in a float's text.
+_HAS_CAPTION_RE = re.compile(r'\\caption(?![a-zA-Z])')
+# Whitespace and whole-line % comments between a float and a caption after it.
+_GAP_RE = re.compile(r'(?:\s|%[^\n]*\n)*')
+
+
+def _caption_lines(caption_cmd, caption_tcignore):
+    r"""Indented caption line for a figure float, %TC:ignore-wrapped if asked."""
+    if caption_tcignore:
+        return '%TC:ignore\n  ' + caption_cmd + '\n%TC:endignore\n'
+    return '  ' + caption_cmd + '\n'
+
+
 def _restructure_figures(content, placement='h', centering=True,
                           noindent=False, default_width=None,
                           caption_tcignore=False):
@@ -492,12 +505,29 @@ def _restructure_figures(content, placement='h', centering=True,
             break
 
         # If an existing \begin{figure} comes first, pass it through unchanged
+        # -- except that a captionless float directly followed by a \caption
+        # (+ \label) takes that caption inside.  Decks put the float in one
+        # minipage and \captionof in the next; once the minipage tags are
+        # stripped the caption would land after \end{figure} ("\caption
+        # outside float").
         if fig_begin != -1 and fig_begin < inc_m.start():
             result.append(text[pos:fig_begin])
             fig_end_m = fig_end_re.search(text, fig_begin)
             if fig_end_m:
-                result.append(text[fig_begin:fig_end_m.end()])
+                fig_text = text[fig_begin:fig_end_m.end()]
                 pos = fig_end_m.end()
+                if not _HAS_CAPTION_RE.search(fig_text):
+                    gap = _GAP_RE.match(text, pos)
+                    parsed_cap = _parse_caption(text, gap.end())
+                    if parsed_cap:
+                        cap_content, label_cmd, pos = parsed_cap
+                        lines = _caption_lines(r'\caption{' + cap_content + '}',
+                                               caption_tcignore)
+                        if label_cmd:
+                            lines += '  ' + label_cmd + '\n'
+                        body = fig_text[:fig_end_m.start() - fig_begin].rstrip()
+                        fig_text = body + '\n' + lines + '\\end{figure}\n'
+                result.append(fig_text)
             else:
                 result.append(text[fig_begin:])
                 pos = n
@@ -544,12 +574,7 @@ def _restructure_figures(content, placement='h', centering=True,
             prefix = '  \\noindent ' if noindent else '  '
             fig += prefix + g + '\n'
         if caption_cmd:
-            if caption_tcignore:
-                fig += '%TC:ignore\n'
-                fig += '  ' + caption_cmd + '\n'
-                fig += '%TC:endignore\n'
-            else:
-                fig += '  ' + caption_cmd + '\n'
+            fig += _caption_lines(caption_cmd, caption_tcignore)
         if label_cmd:
             fig += '  ' + label_cmd + '\n'
         fig += '\\end{figure}\n'

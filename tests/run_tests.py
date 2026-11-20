@@ -151,6 +151,11 @@ def check_agu(text):
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
     check_user_macros(text)
     check('framebreak stripped', _body(text), r'\\framebreak', present=False)
+    check('side caption not loose after float', text,
+          r'\\end\{figure\}\s*(?:%TC:ignore\s*)?\\caption\{Side caption', present=False)
+    check('side caption moved into float', text,
+          r'test_figure_4\.pdf\}\s*(?:%TC:ignore\s*)?\\caption\{Side caption\s+beside the '
+          r'float\.\}\s*(?:%TC:endignore\s*)?\\label\{fig:side\}\s*\\end\{figure\}')
     check('framebreak: list items joined, no stray period', text,
           r'colored text are removed\. Overlay-only content is kept but tag is '
           r'stripped\. Structural markup')
@@ -347,6 +352,11 @@ def check_manuscript(text):
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
     check_user_macros(text)
     check('framebreak stripped', _body(text), r'\\framebreak', present=False)
+    check('side caption not loose after float', text,
+          r'\\end\{figure\}\s*(?:%TC:ignore\s*)?\\caption\{Side caption', present=False)
+    check('side caption moved into float', text,
+          r'test_figure_4\.pdf\}\s*(?:%TC:ignore\s*)?\\caption\{Side caption\s+beside the '
+          r'float\.\}\s*(?:%TC:endignore\s*)?\\label\{fig:side\}\s*\\end\{figure\}')
     check('framebreak: list items joined, no stray period', text,
           r'colored text are removed\. Overlay-only content is kept but tag is '
           r'stripped\. Structural markup')

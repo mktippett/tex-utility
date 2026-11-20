@@ -365,7 +365,8 @@ def transform_content(content, figure_opts=None):
 
     # --- 2. Strip overlay/transition commands that produce no text ----------
     # (command, number of brace arguments)
-    for cmd, n_args in [('pause', 0), ('newpage', 0), ('medskip', 0),
+    for cmd, n_args in [('pause', 0), ('framebreak', 0), ('newpage', 0),
+                        ('medskip', 0),
                         ('bigskip', 0), ('smallskip', 0),
                         ('vspace', 1), ('hspace', 1), ('vfill', 0), ('hfill', 0),
                         ('centering', 0), ('noindent', 0),
@@ -998,12 +999,25 @@ def extract_passthrough_macros(src):
 
 def passthrough_preamble_block(src, default_packages=''):
     r"""
-    Packages (``extract_passthrough_packages``, or `default_packages` if none)
-    followed by user macro definitions (``extract_passthrough_macros``), as one
-    newline-joined block for the manuscript preamble.  Prints one stderr note
-    naming Beamer-only definitions that were not carried.
+    Packages (``extract_passthrough_packages``), then any package named in
+    `default_packages` (a ``\usepackage{a,b}`` line) that the deck does not
+    load itself, then user macro definitions (``extract_passthrough_macros``),
+    as one newline-joined block for the manuscript preamble.  Defaults go
+    after the deck's lines so the deck's options (e.g. ``[fleqn]{mathtools}``,
+    which loads amsmath) win without an option clash.  Beamer loads amsmath
+    implicitly, so decks often use ``\text`` without loading it.  Prints one
+    stderr note naming Beamer-only definitions that were not carried.
     """
-    pkgs = extract_passthrough_packages(src) or default_packages
+    pkgs = extract_passthrough_packages(src)
+    m = re.search(r'\{([^}]+)\}', default_packages)
+    if m:
+        loaded = {p.strip()
+                  for line in pkgs.splitlines()
+                  for p in re.search(r'\{([^}]+)\}', line).group(1).split(',')}
+        missing = [p.strip() for p in m.group(1).split(',')
+                   if p.strip() not in loaded]
+        if missing:
+            pkgs = '\n'.join(x for x in [pkgs, r'\usepackage{%s}' % ','.join(missing)] if x)
     macros, skipped = extract_passthrough_macros(src)
     skipped = [n for n in skipped if n not in _EXPANDED_MACROS]
     if skipped:

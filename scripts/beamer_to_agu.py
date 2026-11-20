@@ -566,7 +566,7 @@ def convert(input_path, output_path, journal=None):
 
     # --- Write output -------------------------------------------------------
     journal_name = journal or _extract_journal_name(src)
-    pkg_ams = passthrough_preamble_block(src)
+    pkg_ams = passthrough_preamble_block(src, r'\usepackage{amsmath,amssymb}')
     preamble = _build_agu_preamble(
         title_text, authors_block, affiliation_lines,
         corresponding, abstract_text, pls_text, journal_name, keypoints_items,

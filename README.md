@@ -556,6 +556,10 @@ main text, and `main-and-si-SI.pdf` for the SI.
 - `\institute{\inst{1} Affil one \and \inst{2} Affil two}` → affiliation block;
   without `\inst{}` markup, all authors share the single `\institute{}` text
   (placeholder only when `\institute{}` is absent too)
+- Math/table `\usepackage` lines (`amsmath`, `amssymb`, `bm`, `mathtools`,
+  `booktabs`, …) are copied; `amsmath` and `amssymb` are always added if the
+  deck doesn't load them (Beamer loads `amsmath` silently, so `\text` works in
+  a deck that never asks for it)
 
 **From the body:**
 - `\section{}`, `\section*{}`, `\subsection{}`, and `\subsection*{}` commands
@@ -575,7 +579,7 @@ main text, and `main-and-si-SI.pdf` for the SI.
   `\TODO{}`. Not copied: `\renewcommand`, `\fig`, and definitions that use
   Beamer commands (listed in a `Note:` on stderr)
 - `enumerate`/`itemize` lists are flattened to prose sentences
-- Beamer overlay and layout commands (`\pause`, `\only`, `\alert`, `\columns`, etc.) are stripped
+- Beamer overlay and layout commands (`\pause`, `\framebreak`, `\only`, `\alert`, `\columns`, etc.) are stripped
 - `\renewcommand\thetable`, `\setcounter{table}`, `\clearpage` passed through verbatim
 - A `%% SI_BEGIN` comment sentinel marks the SI boundary (after the
   bibliography), consumed by `extract_main.py` when splitting out a

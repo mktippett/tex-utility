@@ -150,6 +150,10 @@ def check_agu(text):
     check('beamer markup fully unwrapped', _body(text),
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
     check_user_macros(text)
+    check('framebreak stripped', _body(text), r'\\framebreak', present=False)
+    check('framebreak: list items joined, no stray period', text,
+          r'colored text are removed\. Overlay-only content is kept but tag is '
+          r'stripped\. Structural markup')
     check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
     check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
     check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
@@ -342,6 +346,10 @@ def check_manuscript(text):
     check('beamer markup fully unwrapped', _body(text),
           r'\\(?:alert|structure|only|textcolor|framesubtitle)\b', present=False)
     check_user_macros(text)
+    check('framebreak stripped', _body(text), r'\\framebreak', present=False)
+    check('framebreak: list items joined, no stray period', text,
+          r'colored text are removed\. Overlay-only content is kept but tag is '
+          r'stripped\. Structural markup')
     check('framesubtitle stripped whole', text, r'Subtitle with', present=False)
     check('no framesubtitle leftover', text, r'\}\$\}\s*(?:\\alert\{)?\\textbf\{Nested alert', present=False)
     check('nested alert kept',         text, r'\\textbf\{Nested alert\}')
@@ -645,6 +653,29 @@ Body text.
 """
 
 
+def check_default_packages_unit():
+    r"""passthrough_preamble_block adds each default package the deck does
+    not load itself, after the deck's own lines -- not only when the deck
+    loads no allowlisted package at all."""
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    from beamer_common import passthrough_preamble_block
+    dflt = r'\usepackage{amsmath,amssymb}'
+    def block(pre):
+        return passthrough_preamble_block(
+            '\\documentclass{beamer}\n' + pre + '\\begin{document}\n', dflt)
+    check('defaults: booktabs-only deck gets amsmath', block('\\usepackage{booktabs}\n'),
+          r'\\usepackage\{booktabs\}\n\\usepackage\{amsmath,amssymb\}')
+    check('defaults: deck amsmath options kept, only amssymb added',
+          block('\\usepackage[fleqn]{amsmath}\n'),
+          r'\A\\usepackage\[fleqn\]\{amsmath\}\n\\usepackage\{amssymb\}\Z')
+    check('defaults: nothing added when both loaded',
+          block('\\usepackage{amsmath,amssymb}\n'),
+          r'\A\\usepackage\{amsmath,amssymb\}\Z')
+    check('defaults: mathtools options precede added amsmath',
+          block('\\usepackage[fleqn]{mathtools}\n'),
+          r'\A\\usepackage\[fleqn\]\{mathtools\}\n\\usepackage\{amsmath,amssymb\}\Z')
+
+
 def check_no_si_paths():
     """A deck without an SI section: the AGU converter must not emit the SI
     scaffold or %% SI_BEGIN, and extract_main --no-si must still package the
@@ -666,6 +697,9 @@ def check_no_si_paths():
         check('no-SI: sentinel absent', text, r'%% SI_BEGIN', present=False)
         check('no-SI: endmatter still emitted', text,
               r'\\section\*\{Open Research Section\}')
+        # Beamer loads amsmath implicitly, so a deck that never loads it can
+        # still use \text; the AGU class does not load it either.
+        check('no-SI: AGU default amsmath', text, r'\\usepackage\{amsmath,amssymb\}')
         n_bib = len(re.findall(r'\\bibliography\{refs\}', text))
         if n_bib != 1:
             _failures.append(f'  FAIL  no-SI AGU: bibliography count expected 1, got {n_bib}')
@@ -679,6 +713,8 @@ def check_no_si_paths():
                              f'{result.returncode}:\n{result.stderr}')
         else:
             ams_text = ams_out.read_text()
+            check('no-SI: AMS default amsmath', ams_text,
+                  r'\\usepackage\{amsmath,amssymb\}')
             n_bib_ams = len(re.findall(r'\\bibliography\{refs\}', ams_text))
             if n_bib_ams != 1:
                 _failures.append(f'  FAIL  no-SI AMS: bibliography count expected 1, got {n_bib_ams}')
@@ -1212,6 +1248,7 @@ def main():
         ('extract_main figure rewrite (unit)', check_figure_rewrite_unit),
         ('restructure_figures passthrough (unit)', check_restructure_figures_passthrough_unit),
         ('no-inst affiliation fallback (unit)', check_noinst_fallback_unit),
+        ('default math packages (unit)', check_default_packages_unit),
         ('no-SI conversion + --no-si (e2e)', check_no_si_paths),
         ('single appendix + --no-si (e2e)', check_appendix_paths),
         ('text-only SI checklist (e2e)', check_text_only_si),

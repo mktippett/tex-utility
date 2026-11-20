@@ -84,7 +84,7 @@ index. See also \citealp{zhang2005} and \citeauthor{lau2012}
 (\citeyear{lau2012}).
 \end{frame}
 
-\begin{frame}{Motivation}
+\begin{frame}[allowframebreaks]{Motivation}
 \begin{itemize}
   % One-arg citep with postnote:
   \item Forecast skill degrades rapidly \citep[e.g.,]{vitart2017}
@@ -96,7 +96,12 @@ index. See also \citealp{zhang2005} and \citeauthor{lau2012}
   \item See also \citep[cf.][Table~2]{brown2021}
   % Beamer formatting that should be stripped:
   \item \alert{Highlighted text} and \textcolor{red}{colored text} are removed
+
+  % Beamer page break between items: stripped, no stray period left
+  \framebreak
+
   \item \only<2>{Overlay-only content is kept but tag is stripped}
+  \framebreak<2>
   \item \structure{Structural markup} is unwrapped
 \end{itemize}
 \end{frame}
